@@ -1,0 +1,18 @@
+id: menu
+title: "Choose an Animal"
+bg_color: [30, 60, 95]
+
+body: "Type one of the animal codes below and press Enter."
+prompt: "You can also press the button to return to the main screen."
+
+button:
+  text: "Back"
+  next: main
+
+timeout_s: 45
+timeout_next: main
+
+barcode_map:
+  CAT: cat
+  DOG: dog
+  BUNNY: bunny

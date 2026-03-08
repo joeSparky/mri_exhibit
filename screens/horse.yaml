@@ -1,0 +1,10 @@
+id: horse
+title: "HORSE"
+bg_color: [50, 50, 20]
+
+button:
+  text: "Main"
+  next: main
+
+timeout_s: 20
+timeout_next: main

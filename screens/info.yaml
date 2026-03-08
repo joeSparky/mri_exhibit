@@ -1,0 +1,10 @@
+id: info
+title: "Scan an Animal"
+bg_color: [30, 30, 30]
+
+button:
+  text: "Back"
+  next: main
+
+timeout_s: 15
+timeout_next: main

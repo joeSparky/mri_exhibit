@@ -1,0 +1,19 @@
+id: dog
+bg_color: [0, 0, 0]
+
+image: dog.png
+fullscreen_image: true
+
+button:
+  text: ""
+  next: main
+
+corner_button:
+  text: "back"
+  next: main
+  corner: top_right
+
+timeout_s: 20
+timeout_next: main
+
+show_code_entry: false
