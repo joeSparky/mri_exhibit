@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+import math
 import time
 
 import pygame
@@ -256,7 +257,56 @@ class Renderer:
             print(f"Failed to load image {image_path}: {e}")
             pygame.draw.rect(self.display, (150, 160, 175), rect, border_radius=10)
 
-    def draw_animal_button(self, button_cfg: dict[str, Any], x: int, y: int, width: int, height: int) -> None:
+    def draw_scanner_panel(self, rect: pygame.Rect, scan_image: str | None, t: float) -> None:
+        panel_face = (214, 220, 188)
+        panel_border = (170, 176, 145)
+        bay_face = (225, 230, 205)
+        beam_color = (220, 50, 50)
+
+        pygame.draw.rect(self.display, panel_face, rect, border_radius=18)
+        pygame.draw.rect(self.display, panel_border, rect, width=3, border_radius=18)
+
+        img_box = pygame.Rect(rect.left + 14, rect.top + 14, rect.width - 28, rect.height - 28)
+        pygame.draw.rect(self.display, bay_face, img_box, border_radius=12)
+
+        padding = 10
+        inner_rect = pygame.Rect(
+            img_box.left + padding,
+            img_box.top + padding,
+            img_box.width - padding * 2,
+            img_box.height - padding * 2,
+        )
+        self.draw_image_into_rect(scan_image, inner_rect)
+
+        beam_margin = 22
+        beam_left = img_box.left + beam_margin
+        beam_right = img_box.right - beam_margin
+        sweep = (math.sin(t * 2.4) + 1.0) * 0.5
+        beam_x = int(beam_left + sweep * (beam_right - beam_left))
+
+        glow = pygame.Surface((12, max(1, img_box.height - 44)), pygame.SRCALPHA)
+        glow.fill((255, 90, 90, 60))
+        self.display.blit(glow, (beam_x - 6, img_box.top + 22))
+        pygame.draw.line(
+            self.display,
+            beam_color,
+            (beam_x, img_box.top + 22),
+            (beam_x, img_box.bottom - 22),
+            3,
+        )
+
+    def draw_animal_button(
+        self,
+        button_cfg: dict[str, Any],
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        *,
+        index: int = 0,
+        animate: bool = False,
+        t: float = 0.0,
+    ) -> None:
         text = str(button_cfg.get("text", "")).strip()
         next_screen = button_cfg.get("next")
         image_name = button_cfg.get("image")
@@ -265,15 +315,26 @@ class Renderer:
         if not text:
             return
 
-        rect = pygame.Rect(x, y, width, height)
+        bounce_y = 0
+        shadow_offset_y = 6
+        if animate:
+            bounce_y = int(round(math.sin(t * 3.2 + index * 0.65) * 2.0))
+            shadow_offset_y = 6 + max(0, bounce_y)
 
-        pygame.draw.rect(self.display, (225, 230, 235), rect, border_radius=16)
-        pygame.draw.rect(self.display, (35, 35, 35), rect, width=2, border_radius=16)
+        rect = pygame.Rect(x, y + bounce_y, width, height)
+        shadow_rect = rect.move(4, shadow_offset_y)
+
+        pygame.draw.rect(self.display, (5, 12, 22), shadow_rect, border_radius=18)
+        pygame.draw.rect(self.display, (242, 242, 242), rect, border_radius=18)
+
+        inner_rect = rect.inflate(-14, -14)
+        pygame.draw.rect(self.display, (228, 228, 228), inner_rect, border_radius=12)
+        pygame.draw.rect(self.display, (28, 37, 52), rect, width=3, border_radius=18)
 
         if show_label:
-            image_rect = pygame.Rect(x + 10, y + 10, width - 20, height - 50)
+            image_rect = pygame.Rect(rect.x + 10, rect.y + 10, width - 20, height - 50)
         else:
-            image_rect = pygame.Rect(x + 10, y + 10, width - 20, height - 20)
+            image_rect = pygame.Rect(rect.x + 10, rect.y + 10, width - 20, height - 20)
 
         self.draw_image_into_rect(image_name, image_rect)
 
@@ -290,7 +351,7 @@ class Renderer:
             )
         )
 
-    def draw_buttons(self, buttons_cfg: list[dict[str, Any]]) -> None:
+    def draw_buttons(self, buttons_cfg: list[dict[str, Any]], *, t: float = 0.0, animate: bool = False) -> None:
         self.current_buttons = []
 
         if not buttons_cfg:
@@ -313,12 +374,14 @@ class Renderer:
                 continue
 
             x = start_x + i * (button_width + gap)
-            self.draw_animal_button(button_cfg, x, y, button_width, button_height)
+            self.draw_animal_button(button_cfg, x, y, button_width, button_height, index=i, animate=animate, t=t)
 
     def draw_split_main_screen(self) -> bool:
         split_layout = self.current_screen_data.get("split_layout")
         if split_layout != "vertical":
             return False
+
+        t = pygame.time.get_ticks() / 1000.0
 
         left_panel_width = int(self.current_screen_data.get("left_panel_width", 260))
         gap = 20
@@ -337,7 +400,6 @@ class Renderer:
             self.screen_width - (left_rect.right + gap) - margin,
             self.screen_height - 2 * margin,
         )
-
 
         panel_color = self.get_color("bg_color", (20, 40, 70))
 
@@ -361,36 +423,14 @@ class Renderer:
         self.display.blit(title_surf, title_rect)
         y = title_rect.bottom + 15
 
-        image_height = int(left_rect.height * 0.45)
-
+        image_height = int(left_rect.height * 0.58)
         image_rect = pygame.Rect(
             left_rect.left + 20,
             y,
             left_rect.width - 40,
             image_height,
         )
-
-        # soft shadow
-        shadow_rect = image_rect.move(4, 4)
-        pygame.draw.rect(self.display, (0, 0, 0, 60), shadow_rect, border_radius=12)
-
-        # white card background
-        pygame.draw.rect(self.display, (245, 245, 245), image_rect, border_radius=12)
-
-        # border
-        pygame.draw.rect(self.display, (200, 200, 200), image_rect, width=2, border_radius=12)
-
-        # inset image
-        padding = 12
-        inner_rect = pygame.Rect(
-            image_rect.left + padding,
-            image_rect.top + padding,
-            image_rect.width - padding * 2,
-            image_rect.height - padding * 2,
-        )
-
-        self.draw_image_into_rect(scan_image, inner_rect)
-
+        self.draw_scanner_panel(image_rect, scan_image, t)
         y = image_rect.bottom + 15
 
         body_lines = self.wrap_text(scan_body, self.font_body, left_rect.width - 30)
@@ -410,9 +450,6 @@ class Renderer:
         if count == 0:
             return True
 
-        # Layout policy:
-        # 1-4 animals  -> 2 columns
-        # 5-6 animals  -> 3 columns
         cols = 2 if count <= 4 else 3
         rows = (count + cols - 1) // cols
 
@@ -420,7 +457,7 @@ class Renderer:
         inner_margin_top = 20
         inner_margin_bottom = 18
         cell_gap_x = 14
-        cell_gap_y = 14
+        cell_gap_y = 18
 
         usable_width = right_rect.width - 2 * inner_margin_x
         usable_height = right_rect.height - inner_margin_top - inner_margin_bottom
@@ -428,7 +465,6 @@ class Renderer:
         button_w = (usable_width - cell_gap_x * (cols - 1)) // cols
         button_h = (usable_height - cell_gap_y * (rows - 1)) // rows
 
-        # Keep the buttons visually square-ish and child-friendly
         button_size = min(button_w, button_h)
         button_w = button_size
         button_h = button_size
@@ -443,7 +479,6 @@ class Renderer:
             row = i // cols
             col = i % cols
 
-            # For the last row, center it if it is not full
             items_in_this_row = min(cols, count - row * cols)
             if items_in_this_row < cols:
                 row_width = items_in_this_row * button_w + (items_in_this_row - 1) * cell_gap_x
@@ -454,7 +489,7 @@ class Renderer:
 
             y = grid_start_y + row * (button_h + cell_gap_y)
 
-            self.draw_animal_button(button_cfg, x, y, button_w, button_h)
+            self.draw_animal_button(button_cfg, x, y, button_w, button_h, index=i, animate=True, t=t)
 
         return True
 
@@ -511,13 +546,12 @@ class Renderer:
         elif corner == "bottom_right":
             x = self.screen_width - width - margin
             y = self.screen_height - height - margin
-        else:  # top_right default
+        else:
             x = self.screen_width - width - margin
             y = margin
 
         rect = pygame.Rect(x, y, width, height)
 
-        # Semi-transparent button surface
         overlay = pygame.Surface((width, height), pygame.SRCALPHA)
         pygame.draw.rect(overlay, (255, 255, 255, 70), overlay.get_rect(), border_radius=10)
         pygame.draw.rect(overlay, (255, 255, 255, 140), overlay.get_rect(), width=1, border_radius=10)
@@ -562,10 +596,6 @@ class Renderer:
                 surf = self.font_footer.render(code_text, True, text_color)
                 rect = surf.get_rect(midbottom=(self.screen_width // 2, self.screen_height - 16))
                 self.display.blit(surf, rect)
-
-            # small = self.font_small.render(f"screen: {self.current_screen_id}", True, text_color)
-            # small_rect = small.get_rect(left=10, bottom=self.screen_height - 10)
-            # self.display.blit(small, small_rect)
 
             pygame.display.flip()
             return
@@ -634,7 +664,8 @@ class Renderer:
 
         buttons_cfg = self.current_screen_data.get("buttons")
         if isinstance(buttons_cfg, list) and buttons_cfg:
-            self.draw_buttons(buttons_cfg)
+            t = pygame.time.get_ticks() / 1000.0
+            self.draw_buttons(buttons_cfg, t=t, animate=False)
         else:
             button_cfg = self.current_screen_data.get("button")
             if isinstance(button_cfg, dict):

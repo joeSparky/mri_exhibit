@@ -17,9 +17,10 @@ Python-based touch-screen exhibit for a museum MRI activity.
 - `requirements.txt` - Python dependencies
 
 ## Setup
-1. Create and activate a virtual environment
-2. Install dependencies from `requirements.txt`
-3. Run the application
+1. Create and activate a virtual environment with "python -m venv venv"
+   followed by "venv\Scripts\activate"
+2. Install dependencies from `requirements.txt` with "pip install -r requirements.txt"
+3. Run the application with "python main.py"
 
 ## Notes
 This project is under active development.
