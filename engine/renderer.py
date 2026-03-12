@@ -22,6 +22,7 @@ class Renderer:
         self.base_dir = base_dir
         self.screens_dir = self.base_dir / "screens"
         self.assets_dir = self.base_dir / "assets"
+        self.animals_dir = self.base_dir / "animals"
 
         self.screen_width = screen_width
         self.screen_height = screen_height
@@ -49,7 +50,93 @@ class Renderer:
         self.reload_check_interval_s = 0.5
         self.watched_files_mtime: dict[Path, float] = {}
 
+        self.animals_data = self.load_animals()
+
+    def load_animals(self) -> dict[str, Any]:
+        path = self.animals_dir / "animals.yaml"
+        if not path.exists():
+            return {}
+
+        with path.open("r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+
+        if not isinstance(data, dict):
+            raise ValueError(f"Top level animals YAML must be a mapping: {path}")
+
+        return data
+
+    def build_virtual_animal_screen(self, kind: str, animal_id: str) -> dict[str, Any]:
+        animal = self.animals_data.get(animal_id)
+        if not isinstance(animal, dict):
+            raise ValueError(f"Unknown animal id: {animal_id}")
+
+        name = str(animal.get("name", animal_id.title()))
+        photo = animal.get("photo")
+        mri_image = animal.get("mri_image")
+        fact_lines = animal.get("fact_lines", [])
+        scan_prompt = str(animal.get("scan_prompt", "Let's take an MRI"))
+        scan_duration_s = animal.get("scan_duration_s", 4)
+        show_code_entry = bool(animal.get("show_code_entry", False))
+
+        if not isinstance(fact_lines, list):
+            fact_lines = []
+
+        body = "\n".join(str(x) for x in fact_lines)
+
+        if kind == "animal":
+            return {
+                "title": name,
+                "body": body,
+                "prompt": scan_prompt,
+                "image": photo,
+                "button": {
+                    "text": "Let's Scan!",
+                    "next": f"scan:{animal_id}",
+                },
+                "timeout_s": animal.get("animal_timeout_s", 40),
+                "timeout_next": "main",
+                "show_code_entry": show_code_entry,
+            }
+
+        if kind == "scan":
+            return {
+                "split_layout": "vertical",
+                "scan_panel": {
+                    "title": str(animal.get("scan_title", "Scanning...")),
+                    "body": str(animal.get("scan_body", "Please hold still!")),
+                    "image": photo,
+                },
+                "timeout_s": scan_duration_s,
+                "timeout_next": f"result:{animal_id}",
+                "show_code_entry": show_code_entry,
+            }
+
+        if kind == "result":
+            return {
+                "fullscreen_image": True,
+                "image": mri_image,
+                "corner_button": {
+                    "text": str(animal.get("result_button_text", "")),
+                    "icon": animal.get("result_button_icon"),
+                    "next": "main",
+                    "corner": str(animal.get("result_button_corner", "top_left")),
+                    "bg_color": animal.get("result_button_bg_color", [30, 30, 40, 170]),
+                    "border_color": animal.get("result_button_border_color", [255, 255, 255, 180]),
+                    "text_color": animal.get("result_button_text_color", [255, 255, 255]),
+                },
+                "timeout_s": animal.get("result_timeout_s", 20),
+                "timeout_next": "main",
+                "show_code_entry": show_code_entry,
+            }
+
+        raise ValueError(f"Unknown virtual screen kind: {kind}")
+
     def load_yaml(self, screen_id: str) -> dict[str, Any]:
+        if ":" in screen_id:
+            kind, animal_id = screen_id.split(":", 1)
+            if kind in ("animal", "scan", "result"):
+                return self.build_virtual_animal_screen(kind, animal_id)
+
         path = self.screens_dir / f"{screen_id}.yaml"
         if not path.exists():
             raise FileNotFoundError(f"Could not find screen file: {path}")
@@ -76,16 +163,55 @@ class Renderer:
 
         self.refresh_watched_files()
 
+    def resolve_animal_buttons(self, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        resolved: list[dict[str, Any]] = []
+
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+
+            animal_id = item.get("animal_id")
+            if not animal_id:
+                resolved.append(item)
+                continue
+
+            animal = self.animals_data.get(str(animal_id))
+            if not isinstance(animal, dict):
+                print(f"Unknown animal_id in animal_buttons: {animal_id}")
+                continue
+
+            resolved.append(
+                {
+                    "text": str(animal.get("button_text", animal.get("name", animal_id))),
+                    "image": animal.get("menu_image"),
+                    "next": f"animal:{animal_id}",
+                    "show_label": item.get("show_label", True),
+                }
+            )
+
+        return resolved
+
     def get_watched_paths(self) -> list[Path]:
         paths: list[Path] = []
 
-        screen_path = self.screens_dir / f"{self.current_screen_id}.yaml"
-        if screen_path.exists():
-            paths.append(screen_path)
+        animals_path = self.animals_dir / "animals.yaml"
+        if animals_path.exists():
+            paths.append(animals_path)
+
+        if ":" not in self.current_screen_id:
+            screen_path = self.screens_dir / f"{self.current_screen_id}.yaml"
+            if screen_path.exists():
+                paths.append(screen_path)
 
         bg_image = self.current_screen_data.get("bg_image")
         if bg_image:
             image_path = self.assets_dir / str(bg_image)
+            if image_path.exists():
+                paths.append(image_path)
+
+        image_name = self.current_screen_data.get("image")
+        if image_name:
+            image_path = self.assets_dir / str(image_name)
             if image_path.exists():
                 paths.append(image_path)
 
@@ -99,8 +225,17 @@ class Renderer:
                     if image_path.exists():
                         paths.append(image_path)
 
+        corner_cfg = self.current_screen_data.get("corner_button")
+        if isinstance(corner_cfg, dict):
+            icon_name = corner_cfg.get("icon")
+            if icon_name:
+                image_path = self.assets_dir / str(icon_name)
+                if image_path.exists():
+                    paths.append(image_path)
+
         buttons_cfg = self.current_screen_data.get("buttons")
         if isinstance(buttons_cfg, list):
+            buttons_cfg = self.resolve_animal_buttons(buttons_cfg)
             for button_cfg in buttons_cfg:
                 if isinstance(button_cfg, dict):
                     image_name = button_cfg.get("image")
@@ -108,6 +243,16 @@ class Renderer:
                         image_path = self.assets_dir / str(image_name)
                         if image_path.exists():
                             paths.append(image_path)
+
+        animal_buttons_cfg = self.current_screen_data.get("animal_buttons")
+        if isinstance(animal_buttons_cfg, list):
+            resolved = self.resolve_animal_buttons(animal_buttons_cfg)
+            for button_cfg in resolved:
+                image_name = button_cfg.get("image")
+                if image_name:
+                    image_path = self.assets_dir / str(image_name)
+                    if image_path.exists():
+                        paths.append(image_path)
 
         return paths
 
@@ -154,6 +299,7 @@ class Renderer:
 
             print(f"Hot reload detected for screen '{screen_id}'")
 
+            self.animals_data = self.load_animals()
             self.load_screen(screen_id)
             self.code_buffer = current_code_buffer
             self.screen_start_ms = current_start_ms
@@ -245,9 +391,6 @@ class Renderer:
             return
 
         image_path = self.assets_dir / str(image_name)
-        if not image_path.exists():
-            pygame.draw.rect(self.display, (150, 160, 175), rect, border_radius=10)
-            return
 
         try:
             img = pygame.image.load(str(image_path)).convert_alpha()
@@ -257,11 +400,17 @@ class Renderer:
             print(f"Failed to load image {image_path}: {e}")
             pygame.draw.rect(self.display, (150, 160, 175), rect, border_radius=10)
 
+
+
+
+
+
+
     def draw_scanner_panel(self, rect: pygame.Rect, scan_image: str | None, t: float) -> None:
         panel_face = (214, 220, 188)
         panel_border = (170, 176, 145)
         bay_face = (225, 230, 205)
-        beam_color = (220, 50, 50)
+        beam_color = (255, 50, 50)
 
         pygame.draw.rect(self.display, panel_face, rect, border_radius=18)
         pygame.draw.rect(self.display, panel_border, rect, width=3, border_radius=18)
@@ -278,22 +427,132 @@ class Renderer:
         )
         self.draw_image_into_rect(scan_image, inner_rect)
 
-        beam_margin = 22
-        beam_left = img_box.left + beam_margin
-        beam_right = img_box.right - beam_margin
-        sweep = (math.sin(t * 2.4) + 1.0) * 0.5
-        beam_x = int(beam_left + sweep * (beam_right - beam_left))
+        is_scan_screen = str(self.current_screen_id).startswith("scan:")
 
-        glow = pygame.Surface((12, max(1, img_box.height - 44)), pygame.SRCALPHA)
-        glow.fill((255, 90, 90, 60))
-        self.display.blit(glow, (beam_x - 6, img_box.top + 22))
-        pygame.draw.line(
-            self.display,
-            beam_color,
-            (beam_x, img_box.top + 22),
-            (beam_x, img_box.bottom - 22),
-            3,
-        )
+        if is_scan_screen:
+            # Strong full-panel pulsing red glow
+            pulse = (math.sin(t * 5.0) + 1.0) * 0.5
+            glow_alpha = int(45 + pulse * 70)
+            bay_glow = pygame.Surface((img_box.width, img_box.height), pygame.SRCALPHA)
+            bay_glow.fill((255, 70, 70, glow_alpha))
+            self.display.blit(bay_glow, img_box.topleft)
+
+            # Horizontal animated scan bands
+            band_spacing = 26
+            band_offset = int((t * 80) % band_spacing)
+            for y in range(img_box.top - band_spacing, img_box.bottom, band_spacing):
+                yy = y + band_offset
+                if img_box.top <= yy <= img_box.bottom:
+                    pygame.draw.line(
+                        self.display,
+                        (255, 180, 180),
+                        (img_box.left + 8, yy),
+                        (img_box.right - 8, yy),
+                        2,
+                    )
+
+            # Big translucent vertical beam
+            beam_margin = 18
+            beam_left = img_box.left + beam_margin
+            beam_right = img_box.right - beam_margin
+            sweep = (math.sin(t * 3.2) + 1.0) * 0.5
+            beam_x = int(beam_left + sweep * (beam_right - beam_left))
+
+            beam_width = 46
+            beam_height = max(1, img_box.height - 24)
+            beam_surface = pygame.Surface((beam_width, beam_height), pygame.SRCALPHA)
+
+            for x in range(beam_width):
+                dist = abs(x - beam_width // 2)
+                alpha = max(0, 190 - dist * 12)
+                pygame.draw.line(
+                    beam_surface,
+                    (255, 60, 60, alpha),
+                    (x, 0),
+                    (x, beam_height),
+                    1,
+                )
+
+            self.display.blit(beam_surface, (beam_x - beam_width // 2, img_box.top + 12))
+
+            # Bright center beam line
+            pygame.draw.line(
+                self.display,
+                beam_color,
+                (beam_x, img_box.top + 8),
+                (beam_x, img_box.bottom - 8),
+                5,
+            )
+
+            # Active label inside scanner bay
+            scan_font = pygame.font.SysFont(None, 28)
+            label = scan_font.render("SCANNING...", True, (255, 255, 255))
+            label_bg = pygame.Surface((label.get_width() + 20, label.get_height() + 10), pygame.SRCALPHA)
+            label_bg.fill((180, 0, 0, 170))
+            label_rect = label_bg.get_rect(midtop=(img_box.centerx, img_box.top + 10))
+            self.display.blit(label_bg, label_rect)
+            self.display.blit(label, label.get_rect(center=label_rect.center))
+
+        else:
+            # Menu screen version: milder effect
+            beam_margin = 22
+            beam_left = img_box.left + beam_margin
+            beam_right = img_box.right - beam_margin
+            sweep = (math.sin(t * 2.4) + 1.0) * 0.5
+            beam_x = int(beam_left + sweep * (beam_right - beam_left))
+
+            glow = pygame.Surface((12, max(1, img_box.height - 44)), pygame.SRCALPHA)
+            glow.fill((255, 90, 90, 60))
+            self.display.blit(glow, (beam_x - 6, img_box.top + 22))
+            pygame.draw.line(
+                self.display,
+                (220, 50, 50),
+                (beam_x, img_box.top + 22),
+                (beam_x, img_box.bottom - 22),
+                3,
+            )
+
+
+
+
+
+    def draw_scan_complete_overlay(self) -> None:
+        elapsed_s = (pygame.time.get_ticks() - self.screen_start_ms) / 1000.0
+        timeout_s = self.current_screen_data.get("timeout_s")
+
+        try:
+            total_s = float(timeout_s)
+        except Exception:
+            return
+
+        flash_duration_s = 0.5
+        flash_start_s = max(0.0, total_s - flash_duration_s)
+
+        if elapsed_s < flash_start_s:
+            return
+
+        progress = (elapsed_s - flash_start_s) / flash_duration_s
+        progress = max(0.0, min(1.0, progress))
+
+        # Brighten rapidly near the end
+        alpha = int(40 + progress * 180)
+
+        overlay = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
+        overlay.fill((255, 255, 255, alpha))
+        self.display.blit(overlay, (0, 0))
+
+        # "Scan Complete!" text fades in during the flash
+        text_alpha = int(120 + progress * 135)
+        text_surface = self.font_title.render("Scan Complete!", True, (255, 255, 255))
+        text_surface.set_alpha(text_alpha)
+        text_rect = text_surface.get_rect(center=(self.screen_width // 2, self.screen_height - 70))
+        self.display.blit(text_surface, text_rect)
+
+
+
+
+
+
 
     def draw_animal_button(
         self,
@@ -440,9 +699,13 @@ class Renderer:
             self.display.blit(surf, rect)
             y = rect.bottom + 6
 
-        buttons_cfg = self.current_screen_data.get("buttons", [])
+        buttons_cfg = self.current_screen_data.get("buttons")
+        if not isinstance(buttons_cfg, list):
+            buttons_cfg = self.current_screen_data.get("animal_buttons", [])
         if not isinstance(buttons_cfg, list):
             buttons_cfg = []
+
+        buttons_cfg = self.resolve_animal_buttons(buttons_cfg)
 
         self.current_buttons = []
 
@@ -527,14 +790,12 @@ class Renderer:
             return
 
         text = str(corner_cfg.get("text", "")).strip()
+        icon_name = corner_cfg.get("icon")
         next_screen = corner_cfg.get("next")
         corner = str(corner_cfg.get("corner", "top_right"))
 
-        if not text:
-            return
-
-        width = 56
-        height = 44
+        width = 58
+        height = 58
         margin = 12
 
         if corner == "top_left":
@@ -552,14 +813,49 @@ class Renderer:
 
         rect = pygame.Rect(x, y, width, height)
 
+        raw_bg = corner_cfg.get("bg_color", [30, 30, 40, 170])
+        raw_border = corner_cfg.get("border_color", [255, 255, 255, 180])
+        raw_text = corner_cfg.get("text_color", [255, 255, 255])
+
+        try:
+            bg_color = tuple(raw_bg)
+        except Exception:
+            bg_color = (30, 30, 40, 170)
+
+        try:
+            border_color = tuple(raw_border)
+        except Exception:
+            border_color = (255, 255, 255, 180)
+
+        try:
+            text_color = tuple(raw_text)
+        except Exception:
+            text_color = (255, 255, 255)
+
         overlay = pygame.Surface((width, height), pygame.SRCALPHA)
-        pygame.draw.rect(overlay, (255, 255, 255, 70), overlay.get_rect(), border_radius=10)
-        pygame.draw.rect(overlay, (255, 255, 255, 140), overlay.get_rect(), width=1, border_radius=10)
+        pygame.draw.circle(overlay, bg_color, (width // 2, height // 2), width // 2 - 1)
+        pygame.draw.circle(overlay, border_color, (width // 2, height // 2), width // 2 - 1, 2)
         self.display.blit(overlay, rect.topleft)
 
-        surf = self.font_button.render(text, True, (255, 255, 255))
-        surf_rect = surf.get_rect(center=rect.center)
-        self.display.blit(surf, surf_rect)
+        drew_content = False
+
+        if icon_name:
+            image_path = self.assets_dir / str(icon_name)
+            try:
+                img = pygame.image.load(str(image_path)).convert_alpha()
+                icon_size = 30
+                img = pygame.transform.smoothscale(img, (icon_size, icon_size))
+                img_rect = img.get_rect(center=rect.center)
+                self.display.blit(img, img_rect)
+                drew_content = True
+            except Exception as e:
+                print(f"Failed to load corner icon {image_path}: {e}")
+
+        if not drew_content and text:
+            font = pygame.font.SysFont(None, 34)
+            surf = font.render(text, True, text_color)
+            surf_rect = surf.get_rect(center=rect.center)
+            self.display.blit(surf, surf_rect)
 
         self.current_buttons.append(
             ButtonSpec(
@@ -585,11 +881,16 @@ class Renderer:
                 self.draw_image_into_rect(str(image_name), image_rect)
 
             self.draw_corner_button()
-
             pygame.display.flip()
             return
 
+
+
+
         if self.draw_split_main_screen():
+            if str(self.current_screen_id).startswith("scan:"):
+                self.draw_scan_complete_overlay()
+
             show_code_entry = bool(self.current_screen_data.get("show_code_entry", True))
             if show_code_entry:
                 code_text = f"Code: {self.code_buffer}_"
@@ -599,6 +900,10 @@ class Renderer:
 
             pygame.display.flip()
             return
+
+
+
+
 
         title = self.get_text("title", self.current_screen_id)
         body = self.get_text("body", "")
@@ -716,6 +1021,14 @@ class Renderer:
             next_screen = barcode_map.get(code)
             if next_screen:
                 self.go_to_screen(str(next_screen))
+                return
+
+        for animal_id, animal in self.animals_data.items():
+            if not isinstance(animal, dict):
+                continue
+            animal_barcode = str(animal.get("barcode", "")).strip().upper()
+            if animal_barcode and animal_barcode == code:
+                self.go_to_screen(f"animal:{animal_id}")
                 return
 
         print(f"Unknown code: {code}")

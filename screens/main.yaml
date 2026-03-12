@@ -1,57 +1,20 @@
-id: main
-title: "Choose an Animal"
-bg_color: [20, 40, 70]
-
 split_layout: vertical
-left_panel_width: 260
 
-show_code_entry: false
+bg_color: [20, 40, 70]
+text_color: [255, 255, 255]
 
 scan_panel:
-  title: ""
-  body: ""
-  image: qrScanner.png
+  title: Scan Your Animal
+  body: Scan the tag or touch an animal.
+  image: scanner.png
 
-buttons:
-  - text: "Cat"
-    next: cat
-    image: cat.jpg
-    show_label: false
-
-  - text: "Dog"
-    next: dog
-    image: dog.jpg
-    show_label: false
-
-  - text: "Bunny"
-    next: bunny
-    image: rabbit.jpg
-    show_label: false
-
-  - text: "Pig"
-    next: pig
-    image: pig.jpg
-    show_label: false
-
-  - text: "Cow"
-    next: cow
-    image: cow.jpg
-    show_label: false
-
-  - text: "Chicken"
-    next: chicken
-    image: chicken.png
-    show_label: false
-
-
+animal_buttons:
+  - animal_id: pig
+  - animal_id: dog
+  - animal_id: rabbit
+  - animal_id: cat
 
 timeout_s: 60
 timeout_next: main
 
-barcode_map:
-  CAT: cat
-  DOG: dog
-  BUNNY: bunny
-  PIG: pig
-  COW: cow
-  CHICKEN: chicken
+show_code_entry: true

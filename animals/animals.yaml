@@ -1,0 +1,75 @@
+pig:
+  name: Pig
+  button_text: Pig
+  barcode: PIG001
+  menu_image: pig_button.jpg
+  photo: pig_photo.jpg
+  mri_image: pig_mri.jpg
+  fact_lines:
+    - Pigs use their noses
+    - to explore the world.
+  scan_prompt: Let's take an MRI
+  scan_title: Scanning...
+  scan_body: Please hold still!
+  scan_duration_s: 4
+  animal_timeout_s: 40
+  result_timeout_s: 20
+  result_button_text: Home
+  result_button_corner: top_left
+
+dog:
+  name: Dog
+  button_text: Dog
+  barcode: DOG001
+  menu_image: dog_button.jpg
+  photo: dog_photo.jpg
+  mri_image: dog_mri.png
+  fact_lines:
+    - Dogs can hear sounds
+    - that people cannot hear.
+  scan_prompt: Let's take an MRI
+  scan_title: Scanning...
+  scan_body: Please hold still!
+  scan_duration_s: 4
+  animal_timeout_s: 40
+  result_timeout_s: 20
+  result_button_text: ""
+  result_button_icon: home.png
+  result_button_corner: top_left
+rabbit:
+  name: Rabbit
+  button_text: Rabbit
+  barcode: RABBIT001
+  menu_image: rabbit_button.jpg
+  photo: rabbit_photo.png
+  mri_image: rabbit_mri.png
+  fact_lines:
+    - Rabbits have long ears
+    - and strong back legs.
+  scan_prompt: Let's take an MRI
+  scan_title: Scanning...
+  scan_body: Please hold still!
+  scan_duration_s: 4
+  animal_timeout_s: 40
+  result_timeout_s: 20
+  result_button_text: Home
+  result_button_corner: top_left
+
+cat:
+  name: Cat
+  button_text: Cat
+  barcode: CAT001
+  menu_image: cat_button.jpg
+  photo: cat_photo.jpg
+  mri_image: cat_mri.png
+  fact_lines:
+    - Cats use their whiskers
+    - to sense nearby objects.
+  scan_prompt: Let's take an MRI
+  scan_title: Scanning...
+  scan_body: Please hold still!
+  scan_duration_s: 4
+  animal_timeout_s: 40
+  result_timeout_s: 20
+  result_button_text: Home
+  result_button_corner: top_left
