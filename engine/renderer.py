@@ -70,11 +70,12 @@ class Renderer:
         if not isinstance(animal, dict):
             raise ValueError(f"Unknown animal id: {animal_id}")
 
+        pet_name = str(animal.get("pet_name", animal.get("display_name", animal.get("button_text", animal_id.title()))))
         name = str(animal.get("name", animal_id.title()))
         photo = animal.get("photo")
         mri_image = animal.get("mri_image")
         fact_lines = animal.get("fact_lines", [])
-        scan_prompt = str(animal.get("scan_prompt", "Let's take an MRI"))
+        scan_prompt = str(animal.get("scan_prompt", "Scan"))
         scan_duration_s = animal.get("scan_duration_s", 4)
         show_code_entry = bool(animal.get("show_code_entry", False))
 
@@ -85,12 +86,15 @@ class Renderer:
 
         if kind == "animal":
             return {
+                "card_layout": "animal_profile",
+                "pet_name": pet_name,
                 "title": name,
                 "body": body,
                 "prompt": scan_prompt,
                 "image": photo,
+                "fact_lines": [str(x) for x in fact_lines],
                 "button": {
-                    "text": "Let's Scan!",
+                    "text": scan_prompt,
                     "next": f"scan:{animal_id}",
                 },
                 "timeout_s": animal.get("animal_timeout_s", 40),
@@ -756,6 +760,307 @@ class Renderer:
 
         return True
 
+    def draw_scan_action_button(self, rect: pygame.Rect, text: str, *, t: float = 0.0) -> None:
+        shadow_rect = rect.move(0, 8)
+        pygame.draw.ellipse(self.display, (18, 52, 82), shadow_rect)
+
+        ring_rect = rect.inflate(12, 12)
+        pygame.draw.ellipse(self.display, (245, 244, 229), ring_rect)
+
+        center_rect = rect.inflate(-24, -24)
+        pulse = (math.sin(t * 4.0) + 1.0) * 0.5
+        green = (170 + int(18 * pulse), 220 + int(12 * pulse), 64)
+        pygame.draw.ellipse(self.display, green, center_rect)
+        pygame.draw.ellipse(self.display, (140, 185, 45), center_rect, width=4)
+
+        segments = 10
+        outer_rx = ring_rect.width // 2 - 6
+        outer_ry = ring_rect.height // 2 - 6
+        cx, cy = ring_rect.center
+        seg_w = 16
+        seg_h = 7
+        for i in range(segments):
+            angle = (math.tau / segments) * i + t * 0.15
+            x = cx + int(math.cos(angle) * outer_rx * 0.86)
+            y = cy + int(math.sin(angle) * outer_ry * 0.86)
+            seg = pygame.Rect(0, 0, seg_w, seg_h)
+            seg.center = (x, y)
+            pygame.draw.ellipse(self.display, (49, 101, 144), seg)
+
+        label = self.font_button.render(text, True, (64, 125, 54))
+        if label.get_width() > center_rect.width - 18:
+            scale_font = pygame.font.SysFont(None, 28)
+            label = scale_font.render(text, True, (64, 125, 54))
+        label_rect = label.get_rect(center=center_rect.center)
+        self.display.blit(label, label_rect)
+
+    def draw_animal_profile_screen(self) -> bool:
+        if self.current_screen_data.get("card_layout") != "animal_profile":
+            return False
+
+        bg_color = (36, 95, 136)
+        panel_fill = (214, 236, 247)
+        panel_border = (245, 248, 250)
+        text_color = (30, 30, 30)
+
+        self.display.fill(bg_color)
+        self.current_buttons = []
+
+        margin = 22
+        gutter = 18
+        left_w = 470
+        right_w = self.screen_width - margin * 2 - left_w - gutter
+        top_h = 94
+        bottom_h = self.screen_height - margin * 2 - top_h - gutter
+
+        pet_rect = pygame.Rect(margin, margin, left_w, top_h)
+        photo_rect = pygame.Rect(margin, pet_rect.bottom + gutter, left_w, bottom_h)
+        info_rect = pygame.Rect(pet_rect.right + gutter, margin, right_w, 210)
+        button_rect = pygame.Rect(info_rect.left, info_rect.bottom + gutter, right_w, self.screen_height - margin - (info_rect.bottom + gutter))
+
+        for rect in (pet_rect, photo_rect, info_rect):
+            pygame.draw.rect(self.display, panel_fill, rect, border_radius=22)
+            pygame.draw.rect(self.display, panel_border, rect, width=6, border_radius=22)
+
+        pet_name = self.get_text("pet_name", self.get_text("title", ""))
+        pet_font = pygame.font.SysFont(None, 64)
+        pet_surf = pet_font.render(pet_name, True, text_color)
+        while pet_surf.get_width() > pet_rect.width - 32 and pet_font.get_height() > 34:
+            size = max(34, pet_font.get_height() - 4)
+            pet_font = pygame.font.SysFont(None, size)
+            pet_surf = pet_font.render(pet_name, True, text_color)
+        pet_text_rect = pet_surf.get_rect(center=pet_rect.center)
+        self.display.blit(pet_surf, pet_text_rect)
+
+        image_inner = photo_rect.inflate(-18, -18)
+        self.draw_image_into_rect(self.current_screen_data.get("image"), image_inner)
+        pygame.draw.rect(self.display, panel_border, image_inner, width=4, border_radius=16)
+
+        animal_name = self.get_text("title", "")
+        name_font = pygame.font.SysFont(None, 34)
+        name_lines = self.wrap_text(animal_name, name_font, info_rect.width - 28)
+        y = info_rect.top + 18
+        for line in name_lines:
+            surf = name_font.render(line, True, text_color)
+            self.display.blit(surf, (info_rect.left + 16, y))
+            y += surf.get_height() + 2
+
+        facts = self.current_screen_data.get("fact_lines")
+        if not isinstance(facts, list):
+            body_text = self.get_text("body", "")
+            facts = [line for line in body_text.splitlines() if line.strip()]
+
+        fact_font = pygame.font.SysFont(None, 28)
+        y += 10
+        for raw_line in facts:
+            for line in self.wrap_text(str(raw_line), fact_font, info_rect.width - 30):
+                surf = fact_font.render(line, True, text_color)
+                self.display.blit(surf, (info_rect.left + 16, y))
+                y += surf.get_height() + 6
+
+        t = pygame.time.get_ticks() / 1000.0
+        self.draw_scan_action_button(button_rect, self.get_text("prompt", "Scan"), t=t)
+
+        button_cfg = self.current_screen_data.get("button")
+        next_screen = None
+        if isinstance(button_cfg, dict):
+            next_screen = button_cfg.get("next")
+        self.current_buttons.append(ButtonSpec(text=self.get_text("prompt", "Scan"), next_screen=str(next_screen) if next_screen else None, rect=button_rect))
+
+        show_code_entry = bool(self.current_screen_data.get("show_code_entry", True))
+        if show_code_entry:
+            code_text = f"Code: {self.code_buffer}_"
+            surf = self.font_footer.render(code_text, True, (255, 255, 255))
+            rect = surf.get_rect(midbottom=(self.screen_width // 2, self.screen_height - 10))
+            self.display.blit(surf, rect)
+
+        small = self.font_small.render(f"screen: {self.current_screen_id}", True, (255, 255, 255))
+        small_rect = small.get_rect(left=10, bottom=self.screen_height - 10)
+        self.display.blit(small, small_rect)
+
+        pygame.display.flip()
+        return True
+
+
+    def draw_round_button(
+        self,
+        rect: pygame.Rect,
+        *,
+        fill_color: tuple[int, int, int],
+        border_color: tuple[int, int, int],
+        text: str = "",
+        text_color: tuple[int, int, int] = (20, 20, 20),
+        font: pygame.font.Font | None = None,
+        icon_kind: str | None = None,
+        pulse: bool = False,
+    ) -> None:
+        draw_rect = rect.copy()
+
+        if pulse:
+            t = pygame.time.get_ticks() / 1000.0
+            scale = 1.0 + 0.04 * math.sin(t * 4.0)
+            new_w = max(10, int(rect.width * scale))
+            new_h = max(10, int(rect.height * scale))
+            draw_rect = pygame.Rect(0, 0, new_w, new_h)
+            draw_rect.center = rect.center
+
+        shadow_rect = draw_rect.move(4, 6)
+        pygame.draw.ellipse(self.display, (5, 12, 22), shadow_rect)
+        pygame.draw.ellipse(self.display, fill_color, draw_rect)
+        pygame.draw.ellipse(self.display, border_color, draw_rect, 3)
+
+        if icon_kind == "home":
+            cx, cy = draw_rect.center
+            roof = [
+                (cx, cy - 18),
+                (cx - 20, cy - 2),
+                (cx + 20, cy - 2),
+            ]
+            pygame.draw.polygon(self.display, text_color, roof)
+            body_rect = pygame.Rect(cx - 15, cy - 2, 30, 24)
+            pygame.draw.rect(self.display, text_color, body_rect, border_radius=4)
+            door_rect = pygame.Rect(cx - 5, cy + 8, 10, 14)
+            pygame.draw.rect(self.display, fill_color, door_rect, border_radius=2)
+            return
+
+        if text:
+            use_font = font or self.font_button
+            surf = use_font.render(text, True, text_color)
+            surf_rect = surf.get_rect(center=draw_rect.center)
+            self.display.blit(surf, surf_rect)
+
+    def draw_animal_detail_screen(self) -> bool:
+        if not str(self.current_screen_id).startswith("animal:"):
+            return False
+
+        text_color = self.get_color("text_color", (30, 30, 30))
+        panel_fill = (200, 225, 240)
+        panel_border = (255, 255, 255)
+        bg_color = self.get_color("bg_color", (34, 87, 122))
+        self.display.fill(bg_color)
+        self.current_buttons = []
+
+        pet_name = self.get_text("pet_name", self.get_text("title", ""))
+        animal_name = self.get_text("title", "")
+        fact_text = self.get_text("body", "")
+        image_name = self.current_screen_data.get("image")
+        show_code_entry = bool(self.current_screen_data.get("show_code_entry", True))
+
+        margin = 14
+        gap = 14
+
+        left_w = int(self.screen_width * 0.58)
+        right_x = margin + left_w + gap
+        right_w = self.screen_width - right_x - margin
+
+        # Pet-name panel spans the full first column and is only as tall as needed
+        # for the fitted pet-name font.
+        pet_font_size = 48
+        pet_font = pygame.font.SysFont(None, pet_font_size)
+        while pet_font.size(pet_name)[0] > left_w - 28 and pet_font_size > 28:
+            pet_font_size -= 2
+            pet_font = pygame.font.SysFont(None, pet_font_size)
+
+        pet_surf = pet_font.render(pet_name, True, text_color)
+        pet_h = max(52, pet_surf.get_height() + 24)
+
+        pet_rect = pygame.Rect(margin, margin, left_w, pet_h)
+        photo_rect = pygame.Rect(
+            margin,
+            pet_rect.bottom + gap,
+            left_w,
+            self.screen_height - margin - (pet_rect.bottom + gap),
+        )
+
+        # Bottom-right row: circular Scan button on the left, Home button on the right.
+        button_d = max(66, min(92, int(right_w * 0.28)))
+        button_y = self.screen_height - margin - button_d
+        home_rect = pygame.Rect(
+            right_x + right_w - button_d,
+            button_y,
+            button_d,
+            button_d,
+        )
+        scan_rect = pygame.Rect(
+            home_rect.left - gap - button_d,
+            button_y,
+            button_d,
+            button_d,
+        )
+
+        info_rect = pygame.Rect(
+            right_x,
+            margin,
+            right_w,
+            scan_rect.top - gap - margin,
+        )
+
+        for rect in (pet_rect, photo_rect, info_rect):
+            pygame.draw.rect(self.display, panel_fill, rect, border_radius=24)
+            pygame.draw.rect(self.display, panel_border, rect, width=4, border_radius=24)
+
+        # Pet name: single fitted line.
+        pet_text_rect = pet_surf.get_rect(left=pet_rect.x + 14, centery=pet_rect.centery)
+        self.display.blit(pet_surf, pet_text_rect)
+
+        # Photo
+        inner_photo = photo_rect.inflate(-18, -18)
+        self.draw_image_into_rect(str(image_name) if image_name else None, inner_photo)
+
+        # Animal info
+        name_font = pygame.font.SysFont(None, 42)
+        info_font = self.font_body
+        y = info_rect.y + 16
+        for line in self.wrap_text(animal_name, name_font, info_rect.width - 24):
+            surf = name_font.render(line, True, text_color)
+            rect = surf.get_rect(left=info_rect.x + 14, top=y)
+            self.display.blit(surf, rect)
+            y = rect.bottom + 4
+        y += 6
+        for line in fact_text.splitlines():
+            for wrapped in self.wrap_text(line, info_font, info_rect.width - 28):
+                surf = info_font.render(wrapped, True, text_color)
+                rect = surf.get_rect(left=info_rect.x + 16, top=y)
+                self.display.blit(surf, rect)
+                y = rect.bottom + 6
+
+        # Scan button: fixed label, not from YAML.
+        self.draw_round_button(
+            scan_rect,
+            fill_color=(160, 220, 60),
+            border_color=(255, 255, 255),
+            text="Scan",
+            text_color=(30, 30, 30),
+            font=self.font_small,
+            pulse=True,
+        )
+        self.current_buttons.append(
+            ButtonSpec(
+                text="Scan",
+                next_screen=self.current_screen_data.get("button", {}).get("next"),
+                rect=scan_rect,
+            )
+        )
+
+        # Home button to the right of Scan.
+        self.draw_round_button(
+            home_rect,
+            fill_color=panel_fill,
+            border_color=panel_border,
+            text_color=(30, 30, 30),
+            icon_kind="home",
+        )
+        self.current_buttons.append(ButtonSpec(text="Home", next_screen="main", rect=home_rect))
+
+        if show_code_entry:
+            code_text = f"Code: {self.code_buffer}_"
+            surf = self.font_footer.render(code_text, True, (255, 255, 255))
+            rect = surf.get_rect(midbottom=(self.screen_width // 2, self.screen_height - 10))
+            self.display.blit(surf, rect)
+
+        pygame.display.flip()
+        return True
+
     def draw_single_button(self, button_cfg: dict[str, Any]) -> None:
         text = str(button_cfg.get("text", "")).strip()
         next_screen = button_cfg.get("next")
@@ -884,8 +1189,8 @@ class Renderer:
             pygame.display.flip()
             return
 
-
-
+        if self.draw_animal_detail_screen():
+            return
 
         if self.draw_split_main_screen():
             if str(self.current_screen_id).startswith("scan:"):
@@ -901,9 +1206,8 @@ class Renderer:
             pygame.display.flip()
             return
 
-
-
-
+        if self.draw_animal_profile_screen():
+            return
 
         title = self.get_text("title", self.current_screen_id)
         body = self.get_text("body", "")

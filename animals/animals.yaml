@@ -19,6 +19,7 @@ pig:
 
 dog:
   name: Dog
+  pet_name: Spot
   button_text: Dog
   barcode: DOG001
   menu_image: dog_button.jpg
@@ -27,7 +28,7 @@ dog:
   fact_lines:
     - Dogs can hear sounds
     - that people cannot hear.
-  scan_prompt: Let's take an MRI
+  scan_prompt: Scan
   scan_title: Scanning...
   scan_body: Please hold still!
   scan_duration_s: 4
