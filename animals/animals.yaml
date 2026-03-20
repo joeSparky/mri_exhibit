@@ -1,6 +1,7 @@
 pig:
   name: Pig
   button_text: Pig
+  pet_name: Snoots
   barcode: PIG001
   menu_image: pig_button.jpg
   photo: pig_photo.jpg
@@ -9,7 +10,7 @@ pig:
     - Pigs use their noses
     - to explore the world.
   scan_prompt: Let's take an MRI
-  scan_title: Scanning...
+  scan_title: .
   scan_body: Please hold still!
   scan_duration_s: 4
   animal_timeout_s: 40
@@ -22,7 +23,7 @@ dog:
   pet_name: Spot
   button_text: Dog
   barcode: DOG001
-  menu_image: dog_button.jpg
+  menu_image: goldenPup_button.jpg
   photo: dog_photo.jpg
   mri_image: dog_mri.png
   fact_lines:
@@ -37,6 +38,7 @@ dog:
   result_button_text: ""
   result_button_icon: home.png
   result_button_corner: top_left
+
 rabbit:
   name: Rabbit
   button_text: Rabbit
@@ -58,6 +60,7 @@ rabbit:
 
 cat:
   name: Cat
+  pet_name: Blue Eyes
   button_text: Cat
   barcode: CAT001
   menu_image: cat_button.jpg
@@ -74,3 +77,65 @@ cat:
   result_timeout_s: 20
   result_button_text: Home
   result_button_corner: top_left
+
+alpaca:
+  name: Alpaca
+  button_text: Alpaca
+  pet_name: Snuggles
+  barcode: 10
+  menu_image: alpaca_button.jpg
+  photo: alpaca_photo.jpg
+  mri_image: alpaca_mri.jpg
+  fact_lines:
+    - Alpacas hum to talk
+    - to each other.
+  scan_prompt: Let's take an MRI
+  scan_title: Scanning...
+  scan_body: Please hold still!
+  scan_duration_s: 4
+  animal_timeout_s: 40
+  result_timeout_s: 20
+  result_button_text: Home
+  result_button_corner: top_left
+
+sheep:
+  name: Sheep
+  button_text: Sheep
+  pet_name: Fluffies
+  barcode: SHEEP
+  menu_image: sheep_button.jpg
+  photo: sheep_photo.jpg
+  mri_image: sheep_mri.jpg
+  fact_lines:
+    - Provide wool to
+    - keep us warm.
+  scan_prompt: Let's take an MRI
+  scan_title: Scanning...
+  scan_body: Please hold still!
+  scan_duration_s: 4
+  animal_timeout_s: 40
+  result_timeout_s: 20
+  result_button_text: Home
+  result_button_corner: top_left
+
+goat:
+  name: Goat
+  button_text: Goat
+  pet_name: Billy
+  barcode: GOAT
+  menu_image: goat_button.jpg
+  photo: goat_photo.jpg
+  mri_image: goat_mri.jpg
+  fact_lines:
+    - Goats love to stand
+    - on high places.
+  scan_prompt: Let's take an MRI
+  scan_title: Scanning...
+  scan_body: Please hold still!
+  scan_duration_s: 4
+  animal_timeout_s: 40
+  result_timeout_s: 20
+  result_button_text: Home
+  result_button_corner: top_left
+
+

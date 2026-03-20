@@ -584,26 +584,44 @@ class Renderer:
             bounce_y = int(round(math.sin(t * 3.2 + index * 0.65) * 2.0))
             shadow_offset_y = 6 + max(0, bounce_y)
 
+        border_radius = max(12, min(18, min(width, height) // 7))
+        outer_pad = max(8, min(14, min(width, height) // 12))
+        label_band_h = 0
+        label_gap = 0
+
+        if show_label:
+            label_band_h = max(30, min(50, height // 4))
+            label_gap = max(6, min(10, height // 18))
+
         rect = pygame.Rect(x, y + bounce_y, width, height)
         shadow_rect = rect.move(4, shadow_offset_y)
 
-        pygame.draw.rect(self.display, (5, 12, 22), shadow_rect, border_radius=18)
-        pygame.draw.rect(self.display, (242, 242, 242), rect, border_radius=18)
+        pygame.draw.rect(self.display, (5, 12, 22), shadow_rect, border_radius=border_radius)
+        pygame.draw.rect(self.display, (242, 242, 242), rect, border_radius=border_radius)
 
-        inner_rect = rect.inflate(-14, -14)
-        pygame.draw.rect(self.display, (228, 228, 228), inner_rect, border_radius=12)
-        pygame.draw.rect(self.display, (28, 37, 52), rect, width=3, border_radius=18)
+        inner_rect = rect.inflate(-outer_pad, -outer_pad)
+        pygame.draw.rect(self.display, (228, 228, 228), inner_rect, border_radius=max(10, border_radius - 4))
+        pygame.draw.rect(self.display, (28, 37, 52), rect, width=3, border_radius=border_radius)
 
-        if show_label:
-            image_rect = pygame.Rect(rect.x + 10, rect.y + 10, width - 20, height - 50)
-        else:
-            image_rect = pygame.Rect(rect.x + 10, rect.y + 10, width - 20, height - 20)
+        image_bottom_inset = outer_pad + (label_band_h + label_gap if show_label else 0)
+        image_rect = pygame.Rect(
+            rect.x + outer_pad,
+            rect.y + outer_pad,
+            width - outer_pad * 2,
+            max(20, height - outer_pad - image_bottom_inset),
+        )
 
         self.draw_image_into_rect(image_name, image_rect)
 
         if show_label:
-            surf = self.font_button.render(text, True, (20, 20, 20))
-            surf_rect = surf.get_rect(midbottom=(rect.centerx, rect.bottom - 10))
+            font_size = max(20, min(32, label_band_h))
+            label_font = pygame.font.SysFont(None, font_size)
+            surf = label_font.render(text, True, (20, 20, 20))
+            while surf.get_width() > width - 18 and font_size > 18:
+                font_size -= 2
+                label_font = pygame.font.SysFont(None, font_size)
+                surf = label_font.render(text, True, (20, 20, 20))
+            surf_rect = surf.get_rect(midbottom=(rect.centerx, rect.bottom - max(6, outer_pad - 1)))
             self.display.blit(surf, surf_rect)
 
         self.current_buttons.append(
@@ -646,9 +664,19 @@ class Renderer:
 
         t = pygame.time.get_ticks() / 1000.0
 
-        left_panel_width = int(self.current_screen_data.get("left_panel_width", 260))
-        gap = 20
+        buttons_cfg = self.current_screen_data.get("buttons")
+        if not isinstance(buttons_cfg, list):
+            buttons_cfg = self.current_screen_data.get("animal_buttons", [])
+        if not isinstance(buttons_cfg, list):
+            buttons_cfg = []
+        buttons_cfg = self.resolve_animal_buttons(buttons_cfg)
+
+        count = min(len(buttons_cfg), 6)
+        compact_grid = count > 4
+
         margin = 20
+        gap = 20 if not compact_grid else 14
+        left_panel_width = int(self.current_screen_data.get("left_panel_width", 260 if not compact_grid else 225))
 
         left_rect = pygame.Rect(
             margin,
@@ -681,41 +709,81 @@ class Renderer:
 
         y = left_rect.top + 20
 
-        title_surf = self.font_title.render(scan_title, True, text_color)
+        title_font = self.font_title if not compact_grid else pygame.font.SysFont(None, 44)
+        body_font = self.font_body if not compact_grid else pygame.font.SysFont(None, 26)
+
+        title_surf = title_font.render(scan_title, True, text_color)
         title_rect = title_surf.get_rect(midtop=(left_rect.centerx, y))
         self.display.blit(title_surf, title_rect)
         y = title_rect.bottom + 15
 
-        image_height = int(left_rect.height * 0.58)
+        image_height_ratio = 0.58 if not compact_grid else 0.52
         image_rect = pygame.Rect(
-            left_rect.left + 20,
+            left_rect.left + 16,
             y,
-            left_rect.width - 40,
-            image_height,
+            left_rect.width - 32,
+            int(left_rect.height * image_height_ratio),
         )
         self.draw_scanner_panel(image_rect, scan_image, t)
-        y = image_rect.bottom + 15
+        y = image_rect.bottom + 12
 
-        body_lines = self.wrap_text(scan_body, self.font_body, left_rect.width - 30)
+        body_lines = self.wrap_text(scan_body, body_font, left_rect.width - 24)
         for line in body_lines:
-            surf = self.font_body.render(line, True, text_color)
+            surf = body_font.render(line, True, text_color)
             rect = surf.get_rect(centerx=left_rect.centerx, top=y)
             self.display.blit(surf, rect)
-            y = rect.bottom + 6
-
-        buttons_cfg = self.current_screen_data.get("buttons")
-        if not isinstance(buttons_cfg, list):
-            buttons_cfg = self.current_screen_data.get("animal_buttons", [])
-        if not isinstance(buttons_cfg, list):
-            buttons_cfg = []
-
-        buttons_cfg = self.resolve_animal_buttons(buttons_cfg)
+            y = rect.bottom + 4
 
         self.current_buttons = []
 
-        count = len(buttons_cfg)
         if count == 0:
             return True
+
+        cols = 2 if count <= 4 else 3
+        rows = (count + cols - 1) // cols
+
+        inner_margin_x = 18 if not compact_grid else 12
+        inner_margin_top = 20 if not compact_grid else 14
+        inner_margin_bottom = 18 if not compact_grid else 14
+        cell_gap_x = 14 if not compact_grid else 10
+        cell_gap_y = 18 if not compact_grid else 10
+
+        usable_width = right_rect.width - 2 * inner_margin_x
+        usable_height = right_rect.height - inner_margin_top - inner_margin_bottom
+
+        button_w = (usable_width - cell_gap_x * (cols - 1)) // cols
+        button_h = (usable_height - cell_gap_y * (rows - 1)) // rows
+
+        if compact_grid:
+            button_h = min(button_h, int(button_w * 1.02))
+        else:
+            button_size = min(button_w, button_h)
+            button_w = button_size
+            button_h = button_size
+
+        total_grid_width = cols * button_w + (cols - 1) * cell_gap_x
+        total_grid_height = rows * button_h + (rows - 1) * cell_gap_y
+
+        grid_start_x = right_rect.left + (right_rect.width - total_grid_width) // 2
+        grid_start_y = right_rect.top + (right_rect.height - total_grid_height) // 2
+
+        for i, button_cfg in enumerate(buttons_cfg[:6]):
+            row = i // cols
+            col = i % cols
+
+            items_in_this_row = min(cols, count - row * cols)
+            if items_in_this_row < cols:
+                row_width = items_in_this_row * button_w + (items_in_this_row - 1) * cell_gap_x
+                row_start_x = right_rect.left + (right_rect.width - row_width) // 2
+                x = row_start_x + (i % cols) * (button_w + cell_gap_x)
+            else:
+                x = grid_start_x + col * (button_w + cell_gap_x)
+
+            y = grid_start_y + row * (button_h + cell_gap_y)
+
+            self.draw_animal_button(button_cfg, x, y, button_w, button_h, index=i, animate=True, t=t)
+
+        return True
 
         cols = 2 if count <= 4 else 3
         rows = (count + cols - 1) // cols

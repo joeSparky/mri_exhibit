@@ -11,8 +11,10 @@ scan_panel:
 animal_buttons:
   - animal_id: pig
   - animal_id: dog
-  - animal_id: rabbit
+  - animal_id: goat
   - animal_id: cat
+  - animal_id: alpaca
+  - animal_id: sheep
 
 timeout_s: 60
 timeout_next: main
