@@ -8,6 +8,13 @@ import time
 
 import pygame
 import yaml
+# --- Optional USB GPIO support ---
+try:
+    import serial
+    import serial.tools.list_ports
+    HAS_PYSERIAL = True
+except ImportError:
+    HAS_PYSERIAL = False
 
 
 @dataclass
@@ -62,6 +69,17 @@ class Renderer:
         self.watched_files_mtime: dict[Path, float] = {}
 
         self.animals_data = self.load_animals()
+
+        self.gpio_enabled = False
+        self.ser = None
+
+        if not HAS_PYSERIAL:
+            print("\n⚠️  pyserial is NOT installed!")
+            print("    USB GPIO control is disabled.")
+            print("    To enable it, run:")
+            print("        pip install pyserial\n")
+        else:
+            self.init_gpio()
 
     def load_animals(self) -> dict[str, Any]:
         path = self.animals_dir / "animals.yaml"
@@ -168,6 +186,12 @@ class Renderer:
 
         was_scan_screen = str(self.current_screen_id).startswith("scan:")
         is_scan_screen = str(screen_id).startswith("scan:")
+
+        # --- GPIO control ---
+        if is_scan_screen:
+            self.gpio_set(8, 1)
+        else:
+            self.gpio_set(8, 0)
 
         if was_scan_screen and not is_scan_screen:
             self.stop_scan_audio()
@@ -1557,6 +1581,36 @@ class Renderer:
                 pygame.mixer.music.fadeout(self.scan_audio_fade_out_ms)
         except Exception as e:
             print(f"Failed to stop scan audio: {e}")
+
+    def init_gpio(self):
+        try:
+            ports = list(serial.tools.list_ports.comports())
+
+            for p in ports:
+                desc = p.description.lower()
+                if any(x in desc for x in ["arduino", "ch340", "usb serial", "cp210", "ftdi"]):
+                    print(f"Connecting to GPIO device on {p.device} ({p.description})")
+                    self.ser = serial.Serial(p.device, 115200, timeout=1)
+                    time.sleep(2)
+                    self.ser.write(b"RESET\n")
+                    self.gpio_enabled = True
+                    print("GPIO ready")
+                    return
+
+            print("⚠️  No Arduino GPIO device found")
+
+        except Exception as e:
+            print(f"⚠️  Failed to initialize GPIO: {e}")
+
+    def gpio_set(self, pin: int, value: int):
+        if not self.gpio_enabled or not self.ser:
+            return
+        try:
+            cmd = f"SET {pin} {value}\n"
+            self.ser.write(cmd.encode())
+        except Exception as e:
+            print(f"GPIO write failed: {e}")
+            self.gpio_enabled = False
 
     def run(self, start_screen: str = "main") -> None:
         self.load_screen(start_screen)
