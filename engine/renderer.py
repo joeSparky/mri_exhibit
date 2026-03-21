@@ -8,13 +8,6 @@ import time
 
 import pygame
 import yaml
-# --- Optional USB GPIO support ---
-try:
-    import serial
-    import serial.tools.list_ports
-    HAS_PYSERIAL = True
-except ImportError:
-    HAS_PYSERIAL = False
 
 
 @dataclass
@@ -69,17 +62,6 @@ class Renderer:
         self.watched_files_mtime: dict[Path, float] = {}
 
         self.animals_data = self.load_animals()
-
-        self.gpio_enabled = False
-        self.ser = None
-
-        if not HAS_PYSERIAL:
-            print("\n⚠️  pyserial is NOT installed!")
-            print("    USB GPIO control is disabled.")
-            print("    To enable it, run:")
-            print("        pip install pyserial\n")
-        else:
-            self.init_gpio()
 
     def load_animals(self) -> dict[str, Any]:
         path = self.animals_dir / "animals.yaml"
@@ -186,12 +168,6 @@ class Renderer:
 
         was_scan_screen = str(self.current_screen_id).startswith("scan:")
         is_scan_screen = str(screen_id).startswith("scan:")
-
-        # --- GPIO control ---
-        if is_scan_screen:
-            self.gpio_set(8, 1)
-        else:
-            self.gpio_set(8, 0)
 
         if was_scan_screen and not is_scan_screen:
             self.stop_scan_audio()
@@ -446,6 +422,118 @@ class Renderer:
         except Exception as e:
             print(f"Failed to load image {image_path}: {e}")
             pygame.draw.rect(self.display, (150, 160, 175), rect, border_radius=10)
+
+
+    def draw_image_in_circle(self, image_name: str | None, center: tuple[int, int], diameter: int) -> None:
+        circle_rect = pygame.Rect(0, 0, diameter, diameter)
+        circle_rect.center = center
+
+        if not image_name:
+            pygame.draw.circle(self.display, (150, 160, 175), center, diameter // 2)
+            return
+
+        image_path = self.assets_dir / str(image_name)
+
+        try:
+            img = pygame.image.load(str(image_path)).convert_alpha()
+
+            src_w, src_h = img.get_size()
+            scale = max(diameter / max(1, src_w), diameter / max(1, src_h))
+            scaled_size = (max(1, int(src_w * scale)), max(1, int(src_h * scale)))
+            img = pygame.transform.smoothscale(img, scaled_size)
+
+            crop_rect = img.get_rect(center=(scaled_size[0] // 2, scaled_size[1] // 2))
+            crop_rect.center = (scaled_size[0] // 2, scaled_size[1] // 2)
+
+            circle_surface = pygame.Surface((diameter, diameter), pygame.SRCALPHA)
+            draw_rect = img.get_rect(center=(diameter // 2, diameter // 2))
+            circle_surface.blit(img, draw_rect)
+
+            mask = pygame.Surface((diameter, diameter), pygame.SRCALPHA)
+            pygame.draw.circle(mask, (255, 255, 255, 255), (diameter // 2, diameter // 2), diameter // 2)
+            circle_surface.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+
+            self.display.blit(circle_surface, circle_rect.topleft)
+        except Exception as e:
+            print(f"Failed to load circular image {image_path}: {e}")
+            pygame.draw.circle(self.display, (150, 160, 175), center, diameter // 2)
+
+    def draw_scan_circle_screen(self) -> bool:
+        if not str(self.current_screen_id).startswith("scan:"):
+            return False
+
+        bg_color = self.get_color("bg_color", (20, 40, 70))
+        text_color = self.get_color("text_color", (255, 255, 255))
+        self.display.fill(bg_color)
+        self.current_buttons = []
+
+        scan_panel = self.current_screen_data.get("scan_panel", {})
+        if not isinstance(scan_panel, dict):
+            scan_panel = {}
+
+        scan_image = scan_panel.get("image")
+        scan_body = str(scan_panel.get("body", "Please hold still!")).strip()
+
+        center = (self.screen_width // 2, self.screen_height // 2 - 18)
+        image_diameter = min(self.screen_width, self.screen_height) - 190
+        image_diameter = max(180, min(260, image_diameter))
+        spinner_outer_d = image_diameter + 36
+        spinner_inner_d = image_diameter + 12
+
+        # soft glow behind the animal circle
+        glow = pygame.Surface((spinner_outer_d + 70, spinner_outer_d + 70), pygame.SRCALPHA)
+        glow_rect = glow.get_rect(center=center)
+        for i in range(4):
+            radius = spinner_outer_d // 2 + 10 + i * 8
+            alpha = max(0, 40 - i * 8)
+            pygame.draw.circle(
+                glow,
+                (255, 255, 255, alpha),
+                (glow.get_width() // 2, glow.get_height() // 2),
+                radius,
+            )
+        self.display.blit(glow, glow_rect.topleft)
+
+        # rotating spinner ring
+        ring_rect = pygame.Rect(0, 0, spinner_outer_d, spinner_outer_d)
+        ring_rect.center = center
+        arc_rect = ring_rect.inflate(-8, -8)
+
+        t = pygame.time.get_ticks() / 1000.0
+        base_angle = t * 1.7
+        segment_count = 12
+        segment_span = 0.34
+
+        for i in range(segment_count):
+            fade = (i + 1) / segment_count
+            alpha = int(35 + 190 * fade)
+            color = (255, 255, 255, alpha)
+            start = base_angle - i * 0.28
+            end = start + segment_span
+
+            ring_surface = pygame.Surface((ring_rect.width, ring_rect.height), pygame.SRCALPHA)
+            pygame.draw.arc(
+                ring_surface,
+                color,
+                pygame.Rect(4, 4, arc_rect.width, arc_rect.height),
+                start,
+                end,
+                8,
+            )
+            self.display.blit(ring_surface, ring_rect.topleft)
+
+        # subtle inner ring
+        pygame.draw.circle(self.display, (214, 236, 247), center, spinner_inner_d // 2)
+        pygame.draw.circle(self.display, (255, 255, 255), center, spinner_inner_d // 2, 3)
+
+        self.draw_image_in_circle(scan_image, center, image_diameter)
+
+        # small caption below
+        caption_font = pygame.font.SysFont(None, 34)
+        caption = caption_font.render("Scanning...", True, text_color)
+        caption_rect = caption.get_rect(center=(self.screen_width // 2, center[1] + spinner_outer_d // 2 + 34))
+        self.display.blit(caption, caption_rect)
+        return True
 
 
 
@@ -1326,6 +1414,20 @@ class Renderer:
         self.display.fill(bg_color)
         self.try_draw_background_image()
 
+        if self.draw_scan_circle_screen():
+            if str(self.current_screen_id).startswith("scan:"):
+                self.draw_scan_complete_overlay()
+
+            show_code_entry = bool(self.current_screen_data.get("show_code_entry", True))
+            if show_code_entry:
+                code_text = f"Code: {self.code_buffer}_"
+                surf = self.font_footer.render(code_text, True, text_color)
+                rect = surf.get_rect(midbottom=(self.screen_width // 2, self.screen_height - 16))
+                self.display.blit(surf, rect)
+
+            pygame.display.flip()
+            return
+
         if bool(self.current_screen_data.get("fullscreen_image", False)):
             self.current_buttons = []
 
@@ -1581,36 +1683,6 @@ class Renderer:
                 pygame.mixer.music.fadeout(self.scan_audio_fade_out_ms)
         except Exception as e:
             print(f"Failed to stop scan audio: {e}")
-
-    def init_gpio(self):
-        try:
-            ports = list(serial.tools.list_ports.comports())
-
-            for p in ports:
-                desc = p.description.lower()
-                if any(x in desc for x in ["arduino", "ch340", "usb serial", "cp210", "ftdi"]):
-                    print(f"Connecting to GPIO device on {p.device} ({p.description})")
-                    self.ser = serial.Serial(p.device, 115200, timeout=1)
-                    time.sleep(2)
-                    self.ser.write(b"RESET\n")
-                    self.gpio_enabled = True
-                    print("GPIO ready")
-                    return
-
-            print("⚠️  No Arduino GPIO device found")
-
-        except Exception as e:
-            print(f"⚠️  Failed to initialize GPIO: {e}")
-
-    def gpio_set(self, pin: int, value: int):
-        if not self.gpio_enabled or not self.ser:
-            return
-        try:
-            cmd = f"SET {pin} {value}\n"
-            self.ser.write(cmd.encode())
-        except Exception as e:
-            print(f"GPIO write failed: {e}")
-            self.gpio_enabled = False
 
     def run(self, start_screen: str = "main") -> None:
         self.load_screen(start_screen)
