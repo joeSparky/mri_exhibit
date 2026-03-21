@@ -998,8 +998,19 @@ class Renderer:
             return
 
         if text:
-            use_font = font or self.font_button
-            surf = use_font.render(text, True, text_color)
+            max_width = draw_rect.width - 20
+            max_height = draw_rect.height - 20
+
+            font_size = 48  # start big
+            while font_size > 12:
+                test_font = pygame.font.SysFont(None, font_size)
+                surf = test_font.render(text, True, text_color)
+
+                if surf.get_width() <= max_width and surf.get_height() <= max_height:
+                    break
+
+                font_size -= 2
+
             surf_rect = surf.get_rect(center=draw_rect.center)
             self.display.blit(surf, surf_rect)
 
@@ -1259,7 +1270,37 @@ class Renderer:
                 image_rect = pygame.Rect(0, 0, self.screen_width, self.screen_height)
                 self.draw_image_into_rect(str(image_name), image_rect)
 
-            self.draw_corner_button()
+            corner_cfg = self.current_screen_data.get("corner_button", {})
+
+            button_d = 70
+            margin = 14
+
+            corner = str(corner_cfg.get("corner", "top_left"))
+
+            if corner == "top_left":
+                rect = pygame.Rect(margin, margin, button_d, button_d)
+            elif corner == "bottom_left":
+                rect = pygame.Rect(margin, self.screen_height - button_d - margin, button_d, button_d)
+            elif corner == "bottom_right":
+                rect = pygame.Rect(self.screen_width - button_d - margin, self.screen_height - button_d - margin, button_d, button_d)
+            else:
+                rect = pygame.Rect(self.screen_width - button_d - margin, margin, button_d, button_d)
+
+            self.draw_round_button(
+                rect,
+                fill_color=(214, 236, 247),      # match profile panel
+                border_color=(255, 255, 255),
+                text_color=(30, 30, 30),
+                icon_kind="home",
+            )
+
+            self.current_buttons.append(
+                ButtonSpec(
+                    text="Home",
+                    next_screen=str(corner_cfg.get("next", "main")),
+                    rect=rect,
+                )
+            )
             pygame.display.flip()
             return
 

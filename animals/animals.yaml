@@ -16,7 +16,7 @@ pig:
   animal_timeout_s: 40
   result_timeout_s: 20
   result_button_text: Home
-  result_button_corner: top_left
+  result_button_corner: bottom_right
 
 dog:
   name: Dog
@@ -37,7 +37,7 @@ dog:
   result_timeout_s: 20
   result_button_text: ""
   result_button_icon: home.png
-  result_button_corner: top_left
+  result_button_corner: bottom_right
 
 rabbit:
   name: Rabbit
@@ -56,7 +56,7 @@ rabbit:
   animal_timeout_s: 40
   result_timeout_s: 20
   result_button_text: Home
-  result_button_corner: top_left
+  result_button_corner: bottom_right
 
 cat:
   name: Cat
@@ -76,7 +76,7 @@ cat:
   animal_timeout_s: 40
   result_timeout_s: 20
   result_button_text: Home
-  result_button_corner: top_left
+  result_button_corner: bottom_right
 
 alpaca:
   name: Alpaca
@@ -96,7 +96,7 @@ alpaca:
   animal_timeout_s: 40
   result_timeout_s: 20
   result_button_text: Home
-  result_button_corner: top_left
+  result_button_corner: bottom_right
 
 sheep:
   name: Sheep
@@ -116,7 +116,7 @@ sheep:
   animal_timeout_s: 40
   result_timeout_s: 20
   result_button_text: Home
-  result_button_corner: top_left
+  result_button_corner: bottom_right
 
 goat:
   name: Goat
@@ -136,6 +136,6 @@ goat:
   animal_timeout_s: 40
   result_timeout_s: 20
   result_button_text: Home
-  result_button_corner: top_left
+  result_button_corner: bottom_right
 
 
