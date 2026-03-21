@@ -13,7 +13,7 @@ timeout_s: 45
 timeout_next: main
 
 barcode_map:
-  CAT: cat
+  CAT: 11
   DOG: dog
   BUNNY: bunny
   ALPACA: 10

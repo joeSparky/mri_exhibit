@@ -4,7 +4,7 @@ bg_color: [20, 40, 70]
 text_color: [255, 255, 255]
 
 scan_panel:
-  title: Scan Your Animal
+  title: .
   body: Scan the tag or touch an animal.
   image: scanner.png
 
@@ -19,4 +19,4 @@ animal_buttons:
 timeout_s: 60
 timeout_next: main
 
-show_code_entry: true
+show_code_entry: false

@@ -701,38 +701,44 @@ class Renderer:
         if not isinstance(scan_panel, dict):
             scan_panel = {}
 
-        scan_title = str(scan_panel.get("title", "Scan Your Card"))
         scan_body = str(scan_panel.get("body", "Scan your animal card\nor touch an animal."))
-        scan_image = scan_panel.get("image")
+        scan_image = scan_panel.get("image")       
 
         text_color = self.get_color("text_color", (255, 255, 255))
 
-        y = left_rect.top + 20
-
-        title_font = self.font_title if not compact_grid else pygame.font.SysFont(None, 44)
         body_font = self.font_body if not compact_grid else pygame.font.SysFont(None, 26)
 
-        title_surf = title_font.render(scan_title, True, text_color)
-        title_rect = title_surf.get_rect(midtop=(left_rect.centerx, y))
-        self.display.blit(title_surf, title_rect)
-        y = title_rect.bottom + 15
-
+        # --- Compute sizes first ---
         image_height_ratio = 0.58 if not compact_grid else 0.52
+        image_height = int(left_rect.height * image_height_ratio)
+
+        body_lines = self.wrap_text(scan_body, body_font, left_rect.width - 24)
+        body_height = sum(body_font.size(line)[1] + 4 for line in body_lines)
+
+        gap_between = 12
+        total_height = image_height + gap_between + body_height
+
+        # --- Center vertically ---
+        y = left_rect.top + (left_rect.height - total_height) // 2
+
+        # --- Draw scanner ---
         image_rect = pygame.Rect(
             left_rect.left + 16,
             y,
             left_rect.width - 32,
-            int(left_rect.height * image_height_ratio),
+            image_height,
         )
         self.draw_scanner_panel(image_rect, scan_image, t)
-        y = image_rect.bottom + 12
 
-        body_lines = self.wrap_text(scan_body, body_font, left_rect.width - 24)
+        y = image_rect.bottom + gap_between
+
+        # --- Draw text ---
         for line in body_lines:
             surf = body_font.render(line, True, text_color)
             rect = surf.get_rect(centerx=left_rect.centerx, top=y)
             self.display.blit(surf, rect)
             y = rect.bottom + 4
+
 
         self.current_buttons = []
 

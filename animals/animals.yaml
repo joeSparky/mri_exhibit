@@ -62,7 +62,7 @@ cat:
   name: Cat
   pet_name: Blue Eyes
   button_text: Cat
-  barcode: CAT001
+  barcode: 11
   menu_image: cat_button.jpg
   photo: cat_photo.jpg
   mri_image: cat_mri.png
@@ -102,7 +102,7 @@ sheep:
   name: Sheep
   button_text: Sheep
   pet_name: Fluffies
-  barcode: SHEEP
+  barcode: 12
   menu_image: sheep_button.jpg
   photo: sheep_photo.jpg
   mri_image: sheep_mri.jpg
