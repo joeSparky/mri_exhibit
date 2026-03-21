@@ -18,7 +18,7 @@ class ButtonSpec:
 
 
 class Renderer:
-    def __init__(self, base_dir: Path, screen_width: int = 800, screen_height: int = 480):
+    def __init__(self, base_dir: Path, screen_width: int = 1200, screen_height: int = 800):
         self.base_dir = base_dir
         self.screens_dir = self.base_dir / "screens"
         self.assets_dir = self.base_dir / "assets"
@@ -40,7 +40,11 @@ class Renderer:
             print(f"Audio init failed: {e}")
 
         pygame.display.set_caption("MRI Exhibit")
-        self.display = pygame.display.set_mode((self.screen_width, self.screen_height))
+        # self.display = pygame.display.set_mode((self.screen_width, self.screen_height))
+        self.display = pygame.display.set_mode((self.screen_width, self.screen_height), 
+            pygame.FULLSCREEN,
+            display=1
+            )
         self.clock = pygame.time.Clock()
 
         self.font_title = pygame.font.SysFont(None, 52)
@@ -788,7 +792,162 @@ class Renderer:
             x = start_x + i * (button_width + gap)
             self.draw_animal_button(button_cfg, x, y, button_width, button_height, index=i, animate=animate, t=t)
 
+
     def draw_split_main_screen(self) -> bool:
+        split_layout = self.current_screen_data.get("split_layout")
+        if split_layout != "vertical":
+            return False
+
+        t = pygame.time.get_ticks() / 1000.0
+
+        buttons_cfg = self.current_screen_data.get("buttons")
+        if not isinstance(buttons_cfg, list):
+            buttons_cfg = self.current_screen_data.get("animal_buttons", [])
+        if not isinstance(buttons_cfg, list):
+            buttons_cfg = []
+        buttons_cfg = self.resolve_animal_buttons(buttons_cfg)
+
+        count = min(len(buttons_cfg), 6)
+        compact_grid = count > 4
+
+        margin = 24
+        gap = 24 if not compact_grid else 18
+        content_height = self.screen_height - 2 * margin
+        usable_total_width = self.screen_width - 2 * margin
+
+        cols = 2 if count <= 4 else 3 if count > 0 else 2
+
+        # Make the left panel visually comparable to one button column.
+        if cols == 2:
+            default_left_panel_width = int(usable_total_width * 0.34)
+        else:
+            default_left_panel_width = int(usable_total_width * 0.25)
+
+        left_panel_width = int(
+            self.current_screen_data.get("left_panel_width", default_left_panel_width)
+        )
+        right_panel_width = usable_total_width - left_panel_width - gap
+
+        # Center the full two-panel composition as a single layout.
+        content_left = (self.screen_width - (left_panel_width + gap + right_panel_width)) // 2
+
+        left_rect = pygame.Rect(
+            content_left,
+            margin,
+            left_panel_width,
+            content_height,
+        )
+
+        right_rect = pygame.Rect(
+            left_rect.right + gap,
+            margin,
+            right_panel_width,
+            content_height,
+        )
+
+        panel_color = self.get_color("bg_color", (20, 40, 70))
+
+        pygame.draw.rect(self.display, panel_color, left_rect, border_radius=18)
+        pygame.draw.rect(self.display, panel_color, right_rect, border_radius=18)
+
+        scan_panel = self.current_screen_data.get("scan_panel", {})
+        if not isinstance(scan_panel, dict):
+            scan_panel = {}
+
+        scan_body = str(scan_panel.get("body", "Scan your animal card\nor touch an animal."))
+        scan_image = scan_panel.get("image")
+
+        text_color = self.get_color("text_color", (255, 255, 255))
+        body_font = self.font_body if not compact_grid else pygame.font.SysFont(None, 26)
+
+        # Left panel content
+        image_height_ratio = 0.58 if not compact_grid else 0.52
+        image_height = int(left_rect.height * image_height_ratio)
+
+        body_lines = self.wrap_text(scan_body, body_font, left_rect.width - 24)
+        body_height = sum(body_font.size(line)[1] + 4 for line in body_lines)
+
+        gap_between = 12
+        total_height = image_height + gap_between + body_height
+
+        y = left_rect.top + (left_rect.height - total_height) // 2
+
+        image_rect = pygame.Rect(
+            left_rect.left + 16,
+            y,
+            left_rect.width - 32,
+            image_height,
+        )
+        self.draw_scanner_panel(image_rect, scan_image, t)
+
+        y = image_rect.bottom + gap_between
+
+        for line in body_lines:
+            surf = body_font.render(line, True, text_color)
+            rect = surf.get_rect(centerx=left_rect.centerx, top=y)
+            self.display.blit(surf, rect)
+            y = rect.bottom + 4
+
+        self.current_buttons = []
+
+        if count == 0:
+            return True
+
+        rows = (count + cols - 1) // cols
+
+        inner_margin_x = 18 if not compact_grid else 12
+        inner_margin_top = 20 if not compact_grid else 14
+        inner_margin_bottom = 18 if not compact_grid else 14
+        cell_gap_x = 14 if not compact_grid else 10
+        cell_gap_y = 18 if not compact_grid else 10
+
+        usable_width = right_rect.width - 2 * inner_margin_x
+        usable_height = right_rect.height - inner_margin_top - inner_margin_bottom
+
+        button_w = (usable_width - cell_gap_x * (cols - 1)) // cols
+        button_h = (usable_height - cell_gap_y * (rows - 1)) // rows
+
+        if compact_grid:
+            button_h = min(button_h, int(button_w * 1.02))
+        else:
+            button_size = min(button_w, button_h)
+            button_w = button_size
+            button_h = button_size
+
+        total_grid_width = cols * button_w + (cols - 1) * cell_gap_x
+        total_grid_height = rows * button_h + (rows - 1) * cell_gap_y
+
+        grid_start_x = right_rect.left + (right_rect.width - total_grid_width) // 2
+        grid_start_y = right_rect.top + (right_rect.height - total_grid_height) // 2
+
+        for i, button_cfg in enumerate(buttons_cfg[:6]):
+            row = i // cols
+            col = i % cols
+
+            items_in_this_row = min(cols, count - row * cols)
+            if items_in_this_row < cols:
+                row_width = items_in_this_row * button_w + (items_in_this_row - 1) * cell_gap_x
+                row_start_x = right_rect.left + (right_rect.width - row_width) // 2
+                x = row_start_x + (i % cols) * (button_w + cell_gap_x)
+            else:
+                x = grid_start_x + col * (button_w + cell_gap_x)
+
+            y = grid_start_y + row * (button_h + cell_gap_y)
+
+            self.draw_animal_button(
+                button_cfg,
+                x,
+                y,
+                button_w,
+                button_h,
+                index=i,
+                animate=True,
+                t=t,
+            )
+
+        return True
+
+    def draw_split_main_screenDelete(self) -> bool:
         split_layout = self.current_screen_data.get("split_layout")
         if split_layout != "vertical":
             return False
@@ -1228,9 +1387,12 @@ class Renderer:
         self.draw_image_into_rect(str(image_name) if image_name else None, inner_photo)
 
         # Animal info
-        name_font = pygame.font.SysFont(None, 42)
-        info_font = self.font_body
+        ####################
+        # --- Larger fonts for 1200x800 ---
+        name_font = pygame.font.SysFont(None, 52)
+        info_font = pygame.font.SysFont(None, 32)
 
+        # --- Wrap text ---
         name_lines = self.wrap_text(animal_name, name_font, info_rect.width - 24)
 
         fact_lines_wrapped: list[str] = []
@@ -1238,28 +1400,28 @@ class Renderer:
             wrapped = self.wrap_text(line, info_font, info_rect.width - 28)
             fact_lines_wrapped.extend(wrapped)
 
-        name_height = sum(name_font.size(line)[1] + 4 for line in name_lines)
-        facts_gap = 6 if fact_lines_wrapped else 0
-        facts_height = sum(info_font.size(line)[1] + 6 for line in fact_lines_wrapped)
+        # --- TOP-ALIGNED layout ---
+        y = info_rect.top + 18  # <-- anchor near top
 
-        total_height = name_height + facts_gap + facts_height
-        visual_balance_offset = 18
-        y = info_rect.y + (info_rect.height - total_height) // 2 - visual_balance_offset
-
+        # --- Draw title ---
         for line in name_lines:
             surf = name_font.render(line, True, text_color)
             rect = surf.get_rect(centerx=info_rect.centerx, top=y)
             self.display.blit(surf, rect)
-            y = rect.bottom + 4
+            y = rect.bottom + 8  # more breathing room
 
+        # --- Space before facts ---
         if fact_lines_wrapped:
-            y += 2
+            y += 6
 
+        # --- Draw facts ---
         for wrapped in fact_lines_wrapped:
             surf = info_font.render(wrapped, True, text_color)
             rect = surf.get_rect(left=info_rect.x + 16, top=y)
             self.display.blit(surf, rect)
-            y = rect.bottom + 6
+            y = rect.bottom + 8
+
+        #########################
 
         # Scan button: fixed label, not from YAML.
         self.draw_round_button(

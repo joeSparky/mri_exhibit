@@ -2,8 +2,8 @@ from pathlib import Path
 
 from engine.renderer import Renderer
 
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 480
+SCREEN_WIDTH = 1200
+SCREEN_HEIGHT = 800
 
 
 def main() -> None:
