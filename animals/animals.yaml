@@ -2,7 +2,7 @@ pig:
   name: Pig
   button_text: Pig
   pet_name: Snoots
-  barcode: PIG001
+  barcode: 13
   menu_image: pig_button.jpg
   photo: pig_photo.jpg
   mri_image: pig_mri.jpg
@@ -22,7 +22,7 @@ dog:
   name: Dog
   pet_name: Spot
   button_text: Dog
-  barcode: DOG001
+  barcode: 15
   menu_image: goldenPup_button.jpg
   photo: dog_photo.jpg
   mri_image: dog_mri.png
@@ -122,7 +122,7 @@ goat:
   name: Goat
   button_text: Goat
   pet_name: Billy
-  barcode: GOAT
+  barcode: 14
   menu_image: goat_button.jpg
   photo: goat_photo.jpg
   mri_image: goat_mri.jpg

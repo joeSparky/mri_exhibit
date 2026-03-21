@@ -27,7 +27,18 @@ class Renderer:
         self.screen_width = screen_width
         self.screen_height = screen_height
 
+        self.scan_audio_file = "scan_sound.wav"
+        self.scan_audio_volume = 0.5
+        self.scan_audio_fade_in_ms = 250
+        self.scan_audio_fade_out_ms = 300
+
         pygame.init()
+
+        try:
+            pygame.mixer.init()
+        except Exception as e:
+            print(f"Audio init failed: {e}")
+
         pygame.display.set_caption("MRI Exhibit")
         self.display = pygame.display.set_mode((self.screen_width, self.screen_height))
         self.clock = pygame.time.Clock()
@@ -106,7 +117,6 @@ class Renderer:
             return {
                 "split_layout": "vertical",
                 "scan_panel": {
-                    "title": str(animal.get("scan_title", "Scanning...")),
                     "body": str(animal.get("scan_body", "Please hold still!")),
                     "image": photo,
                 },
@@ -156,11 +166,20 @@ class Renderer:
     def load_screen(self, screen_id: str) -> None:
         data = self.load_yaml(screen_id)
 
+        was_scan_screen = str(self.current_screen_id).startswith("scan:")
+        is_scan_screen = str(screen_id).startswith("scan:")
+
+        if was_scan_screen and not is_scan_screen:
+            self.stop_scan_audio()
+
         self.current_screen_id = screen_id
         self.current_screen_data = data
         self.current_buttons = []
         self.code_buffer = ""
         self.screen_start_ms = pygame.time.get_ticks()
+
+        if is_scan_screen:
+            self.start_scan_audio()
 
         print(f"\nLoaded screen: {screen_id}")
         print(data)
@@ -913,11 +932,15 @@ class Renderer:
         animal_name = self.get_text("title", "")
         name_font = pygame.font.SysFont(None, 34)
         name_lines = self.wrap_text(animal_name, name_font, info_rect.width - 28)
-        y = info_rect.top + 18
+
+        total_height = sum(name_font.size(line)[1] + 2 for line in name_lines)
+        y = info_rect.top + (info_rect.height - total_height) // 2
+
         for line in name_lines:
             surf = name_font.render(line, True, text_color)
-            self.display.blit(surf, (info_rect.left + 16, y))
-            y += surf.get_height() + 2
+            rect = surf.get_rect(centerx=info_rect.centerx, top=y)
+            self.display.blit(surf, rect)
+            y = rect.bottom + 2
 
         facts = self.current_screen_data.get("fact_lines")
         if not isinstance(facts, list):
@@ -1085,7 +1108,7 @@ class Renderer:
             pygame.draw.rect(self.display, panel_border, rect, width=4, border_radius=24)
 
         # Pet name: single fitted line.
-        pet_text_rect = pet_surf.get_rect(left=pet_rect.x + 14, centery=pet_rect.centery)
+        pet_text_rect = pet_surf.get_rect(center=pet_rect.center)
         self.display.blit(pet_surf, pet_text_rect)
 
         # Photo
@@ -1095,19 +1118,36 @@ class Renderer:
         # Animal info
         name_font = pygame.font.SysFont(None, 42)
         info_font = self.font_body
-        y = info_rect.y + 16
-        for line in self.wrap_text(animal_name, name_font, info_rect.width - 24):
+
+        name_lines = self.wrap_text(animal_name, name_font, info_rect.width - 24)
+
+        fact_lines_wrapped: list[str] = []
+        for line in fact_text.splitlines():
+            wrapped = self.wrap_text(line, info_font, info_rect.width - 28)
+            fact_lines_wrapped.extend(wrapped)
+
+        name_height = sum(name_font.size(line)[1] + 4 for line in name_lines)
+        facts_gap = 6 if fact_lines_wrapped else 0
+        facts_height = sum(info_font.size(line)[1] + 6 for line in fact_lines_wrapped)
+
+        total_height = name_height + facts_gap + facts_height
+        visual_balance_offset = 18
+        y = info_rect.y + (info_rect.height - total_height) // 2 - visual_balance_offset
+
+        for line in name_lines:
             surf = name_font.render(line, True, text_color)
-            rect = surf.get_rect(left=info_rect.x + 14, top=y)
+            rect = surf.get_rect(centerx=info_rect.centerx, top=y)
             self.display.blit(surf, rect)
             y = rect.bottom + 4
-        y += 6
-        for line in fact_text.splitlines():
-            for wrapped in self.wrap_text(line, info_font, info_rect.width - 28):
-                surf = info_font.render(wrapped, True, text_color)
-                rect = surf.get_rect(left=info_rect.x + 16, top=y)
-                self.display.blit(surf, rect)
-                y = rect.bottom + 6
+
+        if fact_lines_wrapped:
+            y += 2
+
+        for wrapped in fact_lines_wrapped:
+            surf = info_font.render(wrapped, True, text_color)
+            rect = surf.get_rect(left=info_rect.x + 16, top=y)
+            self.display.blit(surf, rect)
+            y = rect.bottom + 6
 
         # Scan button: fixed label, not from YAML.
         self.draw_round_button(
@@ -1497,6 +1537,26 @@ class Renderer:
             if button.rect and button.rect.collidepoint(pos):
                 self.handle_button_press(button)
                 return
+
+
+    def start_scan_audio(self) -> None:
+        audio_path = self.assets_dir / self.scan_audio_file
+        if not audio_path.exists():
+            return
+
+        try:
+            pygame.mixer.music.load(str(audio_path))
+            pygame.mixer.music.set_volume(self.scan_audio_volume)
+            pygame.mixer.music.play(-1, fade_ms=self.scan_audio_fade_in_ms)
+        except Exception as e:
+            print(f"Failed to start scan audio {audio_path}: {e}")
+
+    def stop_scan_audio(self) -> None:
+        try:
+            if pygame.mixer.get_init():
+                pygame.mixer.music.fadeout(self.scan_audio_fade_out_ms)
+        except Exception as e:
+            print(f"Failed to stop scan audio: {e}")
 
     def run(self, start_screen: str = "main") -> None:
         self.load_screen(start_screen)
