@@ -42,7 +42,7 @@ class Renderer:
         pygame.display.set_caption("MRI Exhibit")
         # self.display = pygame.display.set_mode((self.screen_width, self.screen_height))
         self.display = pygame.display.set_mode((self.screen_width, self.screen_height)
-            #, pygame.FULLSCREEN
+            , pygame.FULLSCREEN
             #, display=1
             )
         self.clock = pygame.time.Clock()
@@ -188,12 +188,12 @@ class Renderer:
                     {"text": "Audio", "next": "diag_play_audio"},
                     {"text": "Errors", "next": "diag_startup_errors"},
                     {"text": "Restart", "next": "diag_restart"},
+                    {"text": "Exit", "next": "diag_exit"},
                     {"text": "Home", "next": "main"},
                 ],
                 "show_code_entry": True,
                 "timeout_next": "main",
             }
-        #############
         if screen_id == "diag_gpio_status":
             gpio_ok = self.usb_gpio_present()
             if gpio_ok and self.usb_gpio_port:
@@ -207,7 +207,6 @@ class Renderer:
                 "button": {"text": "Back", "next": "diagnostics"},
                 "show_code_entry": True,
             }
-        #############
         if screen_id == "diag_light_on":
             ok = self.set_light_strip(True)
             return {
@@ -237,7 +236,6 @@ class Renderer:
                 "show_code_entry": True,
                 "timeout_next": "diagnostics",
             }
-        ###########
         if screen_id == "diag_startup_errors":
             if self.startup_errors:
                 body = "\n\n".join(self.startup_errors)
@@ -251,7 +249,14 @@ class Renderer:
                 "show_code_entry": True,
             }
 
-        ##########
+        if screen_id == "diag_exit":            
+            self.running = False
+            return {
+                "title": "Exiting",
+                "body": "Closing exhibit...",
+                "show_code_entry": False,
+            }
+
         if screen_id == "diag_restart":
             return {
                 "title": "Restart PC",
@@ -2377,6 +2382,10 @@ class Renderer:
     def set_light_strip(self, is_on: bool) -> bool:
         return self.send_usb_gpio_command("LIGHT ON" if is_on else "LIGHT OFF")
 
+    def shutdown(self):
+        print("Shutting down cleanly...")
+        pygame.quit()
+
     def run(self, start_screen: str = "main") -> None:
         self.load_screen(start_screen)
 
@@ -2400,5 +2409,5 @@ class Renderer:
             self.check_timeout()
             self.draw_screen()
             self.clock.tick(30)
-
+        self.shutdown()
         pygame.quit()
