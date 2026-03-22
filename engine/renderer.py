@@ -5,10 +5,11 @@ from pathlib import Path
 from typing import Any
 import math
 import time
-
 import pygame
 import yaml
-
+import os
+import serial
+import serial.tools.list_ports
 
 @dataclass
 class ButtonSpec:
@@ -23,7 +24,6 @@ class Renderer:
         self.screens_dir = self.base_dir / "screens"
         self.assets_dir = self.base_dir / "assets"
         self.animals_dir = self.base_dir / "animals"
-
         self.screen_width = screen_width
         self.screen_height = screen_height
 
@@ -66,6 +66,15 @@ class Renderer:
         self.watched_files_mtime: dict[Path, float] = {}
 
         self.animals_data = self.load_animals()
+        #######
+        self.startup_errors: list[str] = []
+        self.usb_gpio_port: str | None = None
+        self.usb_gpio_baud = 115200
+        self.detect_usb_gpio_on_startup()
+        #########
+
+
+
 
     def load_animals(self) -> dict[str, Any]:
         path = self.animals_dir / "animals.yaml"
@@ -166,6 +175,101 @@ class Renderer:
             kind, animal_id = screen_id.split(":", 1)
             if kind in ("animal", "instruction", "scan", "result"):
                 return self.build_virtual_animal_screen(kind, animal_id)
+
+        if screen_id == "diagnostics":
+            gpio_ok = self.usb_gpio_present()
+            return {
+                "title": "Diagnostics",
+                "body": f"USB GPIO: {'Present' if gpio_ok else 'Not found'}",
+                "buttons": [
+                    {"text": "GPIO", "next": "diag_gpio_status"},
+                    {"text": "Light On", "next": "diag_light_on"},
+                    {"text": "Light Off", "next": "diag_light_off"},
+                    {"text": "Audio", "next": "diag_play_audio"},
+                    {"text": "Errors", "next": "diag_startup_errors"},
+                    {"text": "Restart", "next": "diag_restart"},
+                    {"text": "Home", "next": "main"},
+                ],
+                "show_code_entry": True,
+                "timeout_next": "main",
+            }
+        #############
+        if screen_id == "diag_gpio_status":
+            gpio_ok = self.usb_gpio_present()
+            if gpio_ok and self.usb_gpio_port:
+                body = f"USB GPIO is present on {self.usb_gpio_port}."
+            else:
+                body = "USB GPIO is not found."
+
+            return {
+                "title": "USB GPIO Status",
+                "body": body,
+                "button": {"text": "Back", "next": "diagnostics"},
+                "show_code_entry": True,
+            }
+        #############
+        if screen_id == "diag_light_on":
+            ok = self.set_light_strip(True)
+            return {
+                "title": "Light Strip",
+                "body": "Light strip ON command sent." if ok else "USB GPIO not found. Light strip command not sent.",
+                "button": {"text": "Back", "next": "diagnostics"},
+                "show_code_entry": True,
+                "timeout_next": "diagnostics",
+            }
+
+        if screen_id == "diag_light_off":
+            ok = self.set_light_strip(False)
+            return {
+                "title": "Light Strip",
+                "body": "Light strip OFF command sent." if ok else "USB GPIO not found. Light strip command not sent.",
+                "button": {"text": "Back", "next": "diagnostics"},
+                "show_code_entry": True,
+                "timeout_next": "diagnostics",
+            }
+
+        if screen_id == "diag_play_audio":
+            ok = self.play_mri_audio_once()
+            return {
+                "title": "MRI Audio",
+                "body": "MRI audio started." if ok else "MRI audio could not be played.",
+                "button": {"text": "Back", "next": "diagnostics"},
+                "show_code_entry": True,
+                "timeout_next": "diagnostics",
+            }
+        ###########
+        if screen_id == "diag_startup_errors":
+            if self.startup_errors:
+                body = "\n\n".join(self.startup_errors)
+            else:
+                body = "No startup errors were recorded."
+
+            return {
+                "title": "Startup Errors",
+                "body": body,
+                "button": {"text": "Back", "next": "diagnostics"},
+                "show_code_entry": True,
+            }
+
+        ##########
+        if screen_id == "diag_restart":
+            return {
+                "title": "Restart PC",
+                "body": "Press Restart to reboot this PC and relaunch the exhibit.",
+                "buttons": [
+                    {"text": "Restart", "next": "diag_restart_now"},
+                    {"text": "Back", "next": "diagnostics"},
+                ],
+                "show_code_entry": True,
+            }
+
+        if screen_id == "diag_restart_now":
+            self.restart_pc()
+            return {
+                "title": "Restarting",
+                "body": "The PC is restarting now.",
+                "show_code_entry": False,
+            }
 
         path = self.screens_dir / f"{screen_id}.yaml"
         if not path.exists():
@@ -701,10 +805,6 @@ class Renderer:
 
 
 
-
-
-
-
     def draw_animal_button(
         self,
         button_cfg: dict[str, Any],
@@ -760,17 +860,42 @@ class Renderer:
 
         self.draw_image_into_rect(image_name, image_rect)
 
+
+        ##################
         if show_label:
+            label_max_width = width - 18
+            label_bottom = rect.bottom - max(6, outer_pad - 1)
+            line_gap = 2
+
             font_size = max(20, min(32, label_band_h))
             label_font = pygame.font.SysFont(None, font_size)
-            surf = label_font.render(text, True, (20, 20, 20))
-            while surf.get_width() > width - 18 and font_size > 18:
+            wrapped_lines = self.wrap_text(text, label_font, label_max_width)
+
+            # Shrink until it fits in width and height, but allow wrapping.
+            while font_size > 16:
+                wrapped_lines = self.wrap_text(text, label_font, label_max_width)
+
+                too_many_lines = len(wrapped_lines) > 3
+                line_height = label_font.get_height()
+                total_height = len(wrapped_lines) * line_height + max(0, len(wrapped_lines) - 1) * line_gap
+                too_tall = total_height > (label_band_h + 8)
+
+                if not too_many_lines and not too_tall:
+                    break
+
                 font_size -= 2
                 label_font = pygame.font.SysFont(None, font_size)
-                surf = label_font.render(text, True, (20, 20, 20))
-            surf_rect = surf.get_rect(midbottom=(rect.centerx, rect.bottom - max(6, outer_pad - 1)))
-            self.display.blit(surf, surf_rect)
 
+            line_height = label_font.get_height()
+            total_height = len(wrapped_lines) * line_height + max(0, len(wrapped_lines) - 1) * line_gap
+            y = label_bottom - total_height
+
+            for line in wrapped_lines:
+                surf = label_font.render(line, True, (20, 20, 20))
+                surf_rect = surf.get_rect(centerx=rect.centerx, top=y)
+                self.display.blit(surf, surf_rect)
+                y = surf_rect.bottom + line_gap
+        #################
         self.current_buttons.append(
             ButtonSpec(
                 text=text,
@@ -785,24 +910,67 @@ class Renderer:
         if not buttons_cfg:
             return
 
-        count = len(buttons_cfg)
-
-        button_width = 210
-        button_height = 180
-        gap = 20
-
-        total_width = count * button_width + (count - 1) * gap
-        start_x = (self.screen_width - total_width) // 2
-        y = self.screen_height - button_height - 35
-
-        for i, button_cfg in enumerate(buttons_cfg):
+        visible_buttons = []
+        for button_cfg in buttons_cfg:
             text = str(button_cfg.get("text", "")).strip()
+            if text:
+                visible_buttons.append(button_cfg)
 
-            if not text:
-                continue
+        count = len(visible_buttons)
+        if count == 0:
+            return
 
-            x = start_x + i * (button_width + gap)
-            self.draw_animal_button(button_cfg, x, y, button_width, button_height, index=i, animate=animate, t=t)
+        # Layout rules:
+        # - up to 5 buttons: one row
+        # - 6 or more buttons: two rows
+        if count <= 5:
+            rows = 1
+            cols = count
+        else:
+            rows = 2
+            cols = (count + 1) // 2  # ceil(count / 2)
+
+        margin_x = 24
+        bottom_margin = 34
+        row_gap = 18
+        col_gap = 20
+
+        max_total_width = self.screen_width - 2 * margin_x
+
+        button_width = min(210, (max_total_width - col_gap * (cols - 1)) // cols)
+        button_width = max(150, button_width)
+
+        button_height = 180
+        if rows == 2:
+            button_height = 150
+
+        total_height = rows * button_height + (rows - 1) * row_gap
+        start_y = self.screen_height - bottom_margin - total_height
+
+        index = 0
+        for row in range(rows):
+            remaining = count - index
+            items_in_row = min(cols, remaining)
+
+            row_width = items_in_row * button_width + (items_in_row - 1) * col_gap
+            start_x = (self.screen_width - row_width) // 2
+            y = start_y + row * (button_height + row_gap)
+
+            for col in range(items_in_row):
+                button_cfg = visible_buttons[index]
+                x = start_x + col * (button_width + col_gap)
+
+                self.draw_animal_button(
+                    button_cfg,
+                    x,
+                    y,
+                    button_width,
+                    button_height,
+                    index=index,
+                    animate=animate,
+                    t=t,
+                )
+                index += 1
 
 
     def draw_split_main_screen(self) -> bool:
@@ -1783,12 +1951,18 @@ class Renderer:
         if not code:
             return
 
+        #################
+        if code == "DIAG":
+            self.go_to_screen("diagnostics")
+            return
+
         barcode_map = self.current_screen_data.get("barcode_map", {})
         if isinstance(barcode_map, dict):
             next_screen = barcode_map.get(code)
             if next_screen:
                 self.go_to_screen(str(next_screen))
                 return
+        ################
 
         for animal_id, animal in self.animals_data.items():
             if not isinstance(animal, dict):
@@ -1997,6 +2171,211 @@ class Renderer:
         return True
 
     ####################################
+
+
+    def usb_gpio_present(self) -> bool:
+        # Stub for now. Replace with real serial/USB GPIO detection.
+        # Example later: look for a specific COM port or handshake response.
+        return False
+
+    def set_light_strip(self, is_on: bool) -> bool:
+        # Stub for now. Replace with real USB GPIO command.
+        # Example later: send "LIGHT ON\n" or "LIGHT OFF\n" over serial.
+        print(f"LIGHT STRIP -> {'ON' if is_on else 'OFF'}")
+        return self.usb_gpio_present()
+
+    def play_mri_audio_once(self) -> bool:
+        audio_path = self.assets_dir / self.scan_audio_file
+        if not audio_path.exists():
+            print(f"Audio file missing: {audio_path}")
+            return False
+
+        try:
+            if not pygame.mixer.get_init():
+                pygame.mixer.init()
+            pygame.mixer.music.load(str(audio_path))
+            pygame.mixer.music.set_volume(self.scan_audio_volume)
+            pygame.mixer.music.play(0)
+            return True
+        except Exception as e:
+            print(f"Failed to play MRI audio once: {e}")
+            return False
+
+    def restart_pc(self) -> None:
+        print("Restarting PC...")
+        # Windows restart:
+        os.system("shutdown /r /t 0")
+
+    #####################
+    def add_startup_error(self, message: str) -> None:
+        message = str(message).strip()
+        if not message:
+            return
+        if message not in self.startup_errors:
+            self.startup_errors.append(message)
+        print(f"STARTUP ERROR: {message}")
+
+    def detect_usb_gpio_port(self) -> str | None:
+        # First pass: look for likely Arduino-style ports
+        try:
+            ports = list(serial.tools.list_ports.comports())
+        except Exception as e:
+            self.add_startup_error(f"Could not enumerate serial ports: {e}")
+            return None
+
+        preferred_matches: list[str] = []
+        fallback_matches: list[str] = []
+
+        for port in ports:
+            desc = (port.description or "").lower()
+            manu = (port.manufacturer or "").lower()
+            hwid = (port.hwid or "").lower()
+
+            text = " ".join([desc, manu, hwid])
+
+            if any(key in text for key in ("arduino", "ch340", "usb serial", "cp210", "ftdi")):
+                preferred_matches.append(port.device)
+            else:
+                fallback_matches.append(port.device)
+
+        candidates = preferred_matches + fallback_matches
+
+        for device in candidates:
+            if self.probe_usb_gpio_port(device):
+                return device
+
+        return None
+
+    ###########
+    def probe_usb_gpio_port(self, device: str) -> bool:
+        try:
+            with serial.Serial(device, self.usb_gpio_baud, timeout=0.25) as ser:
+                # Opening the port resets many Arduinos.
+                time.sleep(2.0)
+
+                # Clear whatever was printed during boot.
+                ser.reset_input_buffer()
+                ser.reset_output_buffer()
+
+                # Ask for a handshake.
+                ser.write(b"PING\n")
+                ser.flush()
+
+                deadline = time.monotonic() + 2.0
+                lines: list[str] = []
+
+                while time.monotonic() < deadline:
+                    raw = ser.readline()
+                    if not raw:
+                        continue
+
+                    reply = raw.decode(errors="ignore").strip()
+                    if not reply:
+                        continue
+
+                    lines.append(reply)
+                    print(f"GPIO probe on {device}: {reply!r}")
+
+                    if reply.upper() == "OK":
+                        return True
+
+                msg = f"GPIO probe failed on {device}: no OK reply; got {lines!r}"
+                print(msg)
+                self.add_startup_error(msg)
+                return False
+
+        except Exception as e:
+            msg = f"GPIO probe failed on {device}: {e}"
+            print(msg)
+            self.add_startup_error(msg)
+            return False
+    ########
+    
+    def detect_usb_gpio_on_startup(self) -> None:
+        self.usb_gpio_port = self.detect_usb_gpio_port()
+        if self.usb_gpio_port:
+            print(f"USB GPIO detected on {self.usb_gpio_port}")
+        else:
+            self.add_startup_error("USB GPIO was not detected at startup.")
+
+    def usb_gpio_present(self) -> bool:
+        if self.usb_gpio_port and self.probe_usb_gpio_port(self.usb_gpio_port):
+            return True
+
+        self.usb_gpio_port = self.detect_usb_gpio_port()
+        return self.usb_gpio_port is not None
+
+    ##########
+    def send_usb_gpio_command(self, command: str) -> bool:
+        if not self.usb_gpio_present():
+            return False
+
+        try:
+            assert self.usb_gpio_port is not None
+            with serial.Serial(self.usb_gpio_port, self.usb_gpio_baud, timeout=0.25) as ser:
+                time.sleep(2.0)
+                ser.reset_input_buffer()
+                ser.reset_output_buffer()
+
+                ser.write((command.strip() + "\n").encode("utf-8"))
+                ser.flush()
+
+                deadline = time.monotonic() + 2.0
+                lines: list[str] = []
+
+                while time.monotonic() < deadline:
+                    raw = ser.readline()
+                    if not raw:
+                        continue
+
+                    reply = raw.decode(errors="ignore").strip()
+                    if not reply:
+                        continue
+
+                    lines.append(reply)
+                    print(f"GPIO command {command!r} -> {reply!r}")
+
+                    # Accept a matching acknowledgment, but also allow success
+                    # if the board is chatty and does not echo exactly.
+                    if reply.upper() in {
+                        command.strip().upper(),
+                        "OK",
+                        "LIGHT ON",
+                        "LIGHT OFF",
+                    }:
+                        return True
+
+                msg = f"GPIO command {command!r} failed on {self.usb_gpio_port}: got {lines!r}"
+                print(msg)
+                self.add_startup_error(msg)
+                return False
+
+        except Exception as e:
+            msg = f"Failed to send USB GPIO command {command!r}: {e}"
+            print(msg)
+            self.add_startup_error(msg)
+            return False
+    #########
+    def send_usb_gpio_command(self, command: str) -> bool:
+        if not self.usb_gpio_present():
+            return False
+
+        try:
+            assert self.usb_gpio_port is not None
+            with serial.Serial(self.usb_gpio_port, self.usb_gpio_baud, timeout=1) as ser:
+                time.sleep(1.2)
+                ser.reset_input_buffer()
+                ser.write((command.strip() + "\n").encode("utf-8"))
+                ser.flush()
+                reply = ser.readline().decode(errors="ignore").strip()
+                print(f"GPIO command {command!r} -> {reply!r}")
+                return True
+        except Exception as e:
+            print(f"Failed to send USB GPIO command {command!r}: {e}")
+            return False
+
+    def set_light_strip(self, is_on: bool) -> bool:
+        return self.send_usb_gpio_command("LIGHT ON" if is_on else "LIGHT OFF")
 
     def run(self, start_screen: str = "main") -> None:
         self.load_screen(start_screen)
