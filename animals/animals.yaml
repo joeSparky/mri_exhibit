@@ -5,6 +5,7 @@ pig:
   barcode: 13
   menu_image: pig_button.jpg
   photo: pig_photo.jpg
+  instruction_image: Put_pig_into_MRI.png
   mri_image: pig_mri.jpg
   fact_lines:
     - Pigs use their noses
@@ -25,6 +26,7 @@ dog:
   barcode: 15
   menu_image: goldenPup_button.jpg
   photo: dog_photo.jpg
+  instruction_image: Put_dog_into_MRI.png
   mri_image: dog_mri.png
   fact_lines:
     - Dogs can hear sounds
@@ -45,6 +47,7 @@ rabbit:
   barcode: RABBIT001
   menu_image: rabbit_button.jpg
   photo: rabbit_photo.png
+  instruction_image: Put_rabbit_into_MRI.png
   mri_image: rabbit_mri.png
   fact_lines:
     - Rabbits have long ears
@@ -65,10 +68,17 @@ cat:
   barcode: 11
   menu_image: cat_button.jpg
   photo: cat_photo.jpg
+  instruction_image: Put_cat_into_MRI.png
   mri_image: cat_mri.png
   fact_lines:
     - Cats use their whiskers
     - to sense nearby objects.
+    - " "
+    - Cats can rotate their
+    - ears 180 degrees.
+    - " "
+    - Cats share 95% of their
+    - DNA with tigers.
   scan_prompt: Let's take an MRI
   scan_title: Scanning...
   scan_body: Please hold still!
@@ -85,6 +95,7 @@ alpaca:
   barcode: 10
   menu_image: alpaca_button.jpg
   photo: alpaca_photo.jpg
+  instruction_image: Put_alpaca_into_MRI.png
   mri_image: alpaca_mri.jpg
   fact_lines:
     - Alpacas hum to talk
@@ -105,6 +116,7 @@ sheep:
   barcode: 12
   menu_image: sheep_button.jpg
   photo: sheep_photo.jpg
+  instruction_image: Put_sheep_into_MRI.png
   mri_image: sheep_mri.jpg
   fact_lines:
     - Provide wool to
@@ -125,6 +137,7 @@ goat:
   barcode: 14
   menu_image: goat_button.jpg
   photo: goat_photo.jpg
+  instruction_image: Put_goat_into_MRI.png
   mri_image: goat_mri.jpg
   fact_lines:
     - Goats love to stand

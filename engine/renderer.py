@@ -105,17 +105,29 @@ class Renderer:
                 "pet_name": pet_name,
                 "title": name,
                 "body": body,
-                "prompt": scan_prompt,
+                "prompt": "Next",
                 "image": photo,
                 "fact_lines": [str(x) for x in fact_lines],
                 "button": {
-                    "text": scan_prompt,
-                    "next": f"scan:{animal_id}",
+                    "text": "Next",
+                    "next": f"instruction:{animal_id}",
                 },
                 "timeout_s": animal.get("animal_timeout_s", 40),
                 "timeout_next": "main",
                 "show_code_entry": show_code_entry,
             }
+
+        if kind == "instruction":
+            return {
+                "instruction_layout": True,
+                "instruction_text": str(animal.get("instruction_text", "Please put the animal into the MRI")),
+                "instruction_video": animal.get("instruction_video"),  # optional
+                "instruction_image": animal.get("instruction_image", photo),
+                "timeout_s": None,  # no auto timeout
+                "show_code_entry": show_code_entry,
+                "next_scan": f"scan:{animal_id}",
+            }
+
 
         if kind == "scan":
             return {
@@ -152,7 +164,7 @@ class Renderer:
     def load_yaml(self, screen_id: str) -> dict[str, Any]:
         if ":" in screen_id:
             kind, animal_id = screen_id.split(":", 1)
-            if kind in ("animal", "scan", "result"):
+            if kind in ("animal", "instruction", "scan", "result"):
                 return self.build_virtual_animal_screen(kind, animal_id)
 
         path = self.screens_dir / f"{screen_id}.yaml"
@@ -1360,7 +1372,7 @@ class Renderer:
             button_d,
             button_d,
         )
-        scan_rect = pygame.Rect(
+        next_rect = pygame.Rect(
             home_rect.left - gap - button_d,
             button_y,
             button_d,
@@ -1371,7 +1383,7 @@ class Renderer:
             right_x,
             margin,
             right_w,
-            scan_rect.top - gap - margin,
+            next_rect.top - gap - margin,
         )
 
         for rect in (pet_rect, photo_rect, info_rect):
@@ -1421,27 +1433,32 @@ class Renderer:
             self.display.blit(surf, rect)
             y = rect.bottom + 8
 
-        #########################
+        button_cfg = self.current_screen_data.get("button", {})
+        button_text = "Next"
+        next_screen = None
 
-        # Scan button: fixed label, not from YAML.
+        if isinstance(button_cfg, dict):
+            button_text = str(button_cfg.get("text", "Next"))
+            next_screen = button_cfg.get("next")
+
         self.draw_round_button(
-            scan_rect,
+            next_rect,
             fill_color=(160, 220, 60),
             border_color=(255, 255, 255),
-            text="Scan",
+            text=button_text,
             text_color=(30, 30, 30),
             font=self.font_small,
             pulse=True,
         )
         self.current_buttons.append(
             ButtonSpec(
-                text="Scan",
-                next_screen=self.current_screen_data.get("button", {}).get("next"),
-                rect=scan_rect,
+                text=button_text,
+                next_screen=str(next_screen) if next_screen else None,
+                rect=next_rect,
             )
         )
-
-        # Home button to the right of Scan.
+        
+        # Home button to the right of Next.
         self.draw_round_button(
             home_rect,
             fill_color=panel_fill,
@@ -1575,8 +1592,11 @@ class Renderer:
 
         self.display.fill(bg_color)
         self.try_draw_background_image()
+        if self.draw_instruction_screen():
+            return
 
         if self.draw_scan_circle_screen():
+
             if str(self.current_screen_id).startswith("scan:"):
                 self.draw_scan_complete_overlay()
 
@@ -1845,6 +1865,138 @@ class Renderer:
                 pygame.mixer.music.fadeout(self.scan_audio_fade_out_ms)
         except Exception as e:
             print(f"Failed to stop scan audio: {e}")
+
+    #############################
+
+    def draw_instruction_screen(self) -> bool:
+        if not str(self.current_screen_id).startswith("instruction:"):
+            return False
+
+        bg_color = (34, 87, 122)
+        panel_fill = (200, 225, 240)
+        panel_border = (255, 255, 255)
+        text_color = (30, 30, 30)
+
+        self.display.fill(bg_color)
+        self.current_buttons = []
+
+        image_name = self.current_screen_data.get("instruction_image")
+        instruction_text = self.current_screen_data.get(
+            "instruction_text",
+            "Put animal into the MRI",
+        )
+        show_code_entry = bool(self.current_screen_data.get("show_code_entry", True))
+
+        margin = 14
+        gap = 14
+
+        # Layout:
+        #   top: large image panel
+        #   bottom: single action band with text + Scan + Home
+        bottom_h = 150
+        image_rect = pygame.Rect(
+            margin,
+            margin,
+            self.screen_width - 2 * margin,
+            self.screen_height - (3 * margin) - bottom_h,
+        )
+        bottom_rect = pygame.Rect(
+            margin,
+            image_rect.bottom + margin,
+            self.screen_width - 2 * margin,
+            bottom_h,
+        )
+
+        pygame.draw.rect(self.display, panel_fill, image_rect, border_radius=24)
+        pygame.draw.rect(self.display, panel_border, image_rect, width=4, border_radius=24)
+
+        pygame.draw.rect(self.display, panel_fill, bottom_rect, border_radius=24)
+        pygame.draw.rect(self.display, panel_border, bottom_rect, width=4, border_radius=24)
+
+        # Top image
+        inner_image = image_rect.inflate(-18, -18)
+        self.draw_image_into_rect(str(image_name) if image_name else None, inner_image)
+
+        # Bottom controls
+        button_d = 88
+        button_gap = 14
+
+        home_rect = pygame.Rect(
+            bottom_rect.right - 18 - button_d,
+            bottom_rect.centery - button_d // 2,
+            button_d,
+            button_d,
+        )
+        scan_rect = pygame.Rect(
+            home_rect.left - button_gap - button_d,
+            bottom_rect.centery - button_d // 2,
+            button_d,
+            button_d,
+        )
+
+        text_rect = pygame.Rect(
+            bottom_rect.left + 24,
+            bottom_rect.top + 18,
+            scan_rect.left - bottom_rect.left - 40,
+            bottom_rect.height - 36,
+        )
+
+        body_font = pygame.font.SysFont(None, 42)
+        wrapped_lines = self.wrap_text(instruction_text, body_font, text_rect.width)
+
+        line_height = body_font.get_height()
+        total_text_height = len(wrapped_lines) * line_height + max(0, len(wrapped_lines) - 1) * 8
+        y = text_rect.top + (text_rect.height - total_text_height) // 2
+
+        for line in wrapped_lines:
+            surf = body_font.render(line, True, text_color)
+            rect = surf.get_rect(left=text_rect.left, top=y)
+            self.display.blit(surf, rect)
+            y = rect.bottom + 8
+
+        # Scan button
+        self.draw_round_button(
+            scan_rect,
+            fill_color=(160, 220, 60),
+            border_color=(255, 255, 255),
+            text="Scan",
+            text_color=(30, 30, 30),
+            pulse=True,
+        )
+        self.current_buttons.append(
+            ButtonSpec(
+                text="Scan",
+                next_screen=str(self.current_screen_data.get("next_scan", "")) or None,
+                rect=scan_rect,
+            )
+        )
+
+        # Home button
+        self.draw_round_button(
+            home_rect,
+            fill_color=panel_fill,
+            border_color=panel_border,
+            text_color=(30, 30, 30),
+            icon_kind="home",
+        )
+        self.current_buttons.append(
+            ButtonSpec(
+                text="Home",
+                next_screen="main",
+                rect=home_rect,
+            )
+        )
+
+        if show_code_entry:
+            code_text = f"Code: {self.code_buffer}_"
+            surf = self.font_footer.render(code_text, True, (255, 255, 255))
+            rect = surf.get_rect(midbottom=(self.screen_width // 2, self.screen_height - 10))
+            self.display.blit(surf, rect)
+
+        pygame.display.flip()
+        return True
+
+    ####################################
 
     def run(self, start_screen: str = "main") -> None:
         self.load_screen(start_screen)
