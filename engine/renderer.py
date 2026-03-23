@@ -191,6 +191,7 @@ class Renderer:
                     {"text": "Audio", "next": "diag_play_audio"},
                     {"text": "Errors", "next": "diag_startup_errors"},
                     {"text": "Restart", "next": "diag_restart"},
+                    {"text": "Exit App", "next": "diag_exit"},
                     {"text": "Home", "next": "main"},
                 ],
                 "show_code_entry": True,
@@ -279,6 +280,26 @@ class Renderer:
             return {
                 "title": "Restarting",
                 "body": "The PC is restarting now.",
+                "show_code_entry": False,
+            }
+
+        if screen_id == "diag_exit":
+            return {
+                "title": "Exit Application",
+                "body": "Press Exit to close the exhibit application and return to Windows.",
+                "buttons": [
+                    {"text": "Exit", "next": "diag_exit_now"},
+                    {"text": "Back", "next": "diagnostics"},
+                ],
+                "show_code_entry": True,
+                "timeout_s": None,
+            }
+
+        if screen_id == "diag_exit_now":
+            self.shutdown_application()
+            return {
+                "title": "Exiting",
+                "body": "The exhibit application is closing now.",
                 "show_code_entry": False,
             }
 
@@ -2201,6 +2222,26 @@ class Renderer:
         except Exception as e:
             print(f"Failed to play MRI audio once: {e}")
             return False
+
+    def shutdown_application(self) -> None:
+        print("Shutting down application...")
+
+        try:
+            self.stop_scan_audio()
+        except Exception:
+            pass
+
+        try:
+            self.gpio.light_off()
+        except Exception:
+            pass
+
+        try:
+            self.gpio.close()
+        except Exception:
+            pass
+
+        self.running = False
 
     def restart_pc(self) -> None:
         print("Restarting PC...")
