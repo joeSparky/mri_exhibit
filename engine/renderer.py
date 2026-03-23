@@ -45,7 +45,7 @@ class Renderer:
         pygame.display.set_caption("MRI Exhibit")
         # self.display = pygame.display.set_mode((self.screen_width, self.screen_height))
         self.display = pygame.display.set_mode((self.screen_width, self.screen_height)
-            #, pygame.FULLSCREEN
+            , pygame.FULLSCREEN
             #, display=1
             )
         self.clock = pygame.time.Clock()
