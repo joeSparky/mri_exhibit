@@ -5,11 +5,13 @@ from pathlib import Path
 from typing import Any
 import math
 import time
+import os
+
 import pygame
 import yaml
-import os
-import serial
-import serial.tools.list_ports
+
+from .usb_gpio import UsbGpio
+
 
 @dataclass
 class ButtonSpec:
@@ -24,6 +26,7 @@ class Renderer:
         self.screens_dir = self.base_dir / "screens"
         self.assets_dir = self.base_dir / "assets"
         self.animals_dir = self.base_dir / "animals"
+
         self.screen_width = screen_width
         self.screen_height = screen_height
 
@@ -42,7 +45,7 @@ class Renderer:
         pygame.display.set_caption("MRI Exhibit")
         # self.display = pygame.display.set_mode((self.screen_width, self.screen_height))
         self.display = pygame.display.set_mode((self.screen_width, self.screen_height)
-            , pygame.FULLSCREEN
+            #, pygame.FULLSCREEN
             #, display=1
             )
         self.clock = pygame.time.Clock()
@@ -66,15 +69,11 @@ class Renderer:
         self.watched_files_mtime: dict[Path, float] = {}
 
         self.animals_data = self.load_animals()
-        #######
         self.startup_errors: list[str] = []
-        self.usb_gpio_port: str | None = None
-        self.usb_gpio_baud = 115200
-        self.detect_usb_gpio_on_startup()
-        #########
+        self.gpio = UsbGpio()
 
-
-
+        if not self.gpio.open():
+            self.add_startup_error(self.gpio.last_error or "USB GPIO was not detected at startup.")
 
     def load_animals(self) -> dict[str, Any]:
         path = self.animals_dir / "animals.yaml"
@@ -177,10 +176,14 @@ class Renderer:
                 return self.build_virtual_animal_screen(kind, animal_id)
 
         if screen_id == "diagnostics":
-            gpio_ok = self.usb_gpio_present()
+            gpio_ok = self.gpio.is_present()
+            gpio_text = f"USB GPIO: {'Present' if gpio_ok else 'Not found'}"
+            if gpio_ok and getattr(self.gpio, "port", None):
+                gpio_text = f"USB GPIO: Present ({self.gpio.port})"
+
             return {
                 "title": "Diagnostics",
-                "body": f"USB GPIO: {'Present' if gpio_ok else 'Not found'}",
+                "body": gpio_text,
                 "buttons": [
                     {"text": "GPIO", "next": "diag_gpio_status"},
                     {"text": "Light On", "next": "diag_light_on"},
@@ -188,43 +191,51 @@ class Renderer:
                     {"text": "Audio", "next": "diag_play_audio"},
                     {"text": "Errors", "next": "diag_startup_errors"},
                     {"text": "Restart", "next": "diag_restart"},
-                    {"text": "Exit", "next": "diag_exit"},
                     {"text": "Home", "next": "main"},
                 ],
                 "show_code_entry": True,
-                "timeout_next": "main",
+                "timeout_s": None,
             }
+
         if screen_id == "diag_gpio_status":
-            gpio_ok = self.usb_gpio_present()
-            if gpio_ok and self.usb_gpio_port:
-                body = f"USB GPIO is present on {self.usb_gpio_port}."
+            gpio_ok = self.gpio.is_present()
+            if gpio_ok and getattr(self.gpio, "port", None):
+                body = f"USB GPIO is present on {self.gpio.port}."
             else:
-                body = "USB GPIO is not found."
+                body = self.gpio.last_error or "USB GPIO is not found."
 
             return {
                 "title": "USB GPIO Status",
                 "body": body,
                 "button": {"text": "Back", "next": "diagnostics"},
                 "show_code_entry": True,
+                "timeout_s": None,
             }
+
         if screen_id == "diag_light_on":
-            ok = self.set_light_strip(True)
+            ok = self.gpio.light_on()
+            if not ok and self.gpio.last_error:
+                self.add_startup_error(self.gpio.last_error)
+
             return {
                 "title": "Light Strip",
-                "body": "Light strip ON command sent." if ok else "USB GPIO not found. Light strip command not sent.",
+                "body": "Light strip ON command sent." if ok else (self.gpio.last_error or "Light strip ON command failed."),
                 "button": {"text": "Back", "next": "diagnostics"},
                 "show_code_entry": True,
-                "timeout_next": "diagnostics",
+                "timeout_s": None,
             }
 
         if screen_id == "diag_light_off":
-            ok = self.set_light_strip(False)
+            ok = self.gpio.light_off()
+            if not ok and self.gpio.last_error:
+                self.add_startup_error(self.gpio.last_error)
+
             return {
                 "title": "Light Strip",
-                "body": "Light strip OFF command sent." if ok else "USB GPIO not found. Light strip command not sent.",
+                "body": "Light strip OFF command sent." if ok else (self.gpio.last_error or "Light strip OFF command failed."),
                 "button": {"text": "Back", "next": "diagnostics"},
                 "show_code_entry": True,
-                "timeout_next": "diagnostics",
+                "timeout_s": None,
             }
 
         if screen_id == "diag_play_audio":
@@ -234,8 +245,9 @@ class Renderer:
                 "body": "MRI audio started." if ok else "MRI audio could not be played.",
                 "button": {"text": "Back", "next": "diagnostics"},
                 "show_code_entry": True,
-                "timeout_next": "diagnostics",
+                "timeout_s": None,
             }
+
         if screen_id == "diag_startup_errors":
             if self.startup_errors:
                 body = "\n\n".join(self.startup_errors)
@@ -247,14 +259,7 @@ class Renderer:
                 "body": body,
                 "button": {"text": "Back", "next": "diagnostics"},
                 "show_code_entry": True,
-            }
-
-        if screen_id == "diag_exit":            
-            self.running = False
-            return {
-                "title": "Exiting",
-                "body": "Closing exhibit...",
-                "show_code_entry": False,
+                "timeout_s": None,
             }
 
         if screen_id == "diag_restart":
@@ -266,6 +271,7 @@ class Renderer:
                     {"text": "Back", "next": "diagnostics"},
                 ],
                 "show_code_entry": True,
+                "timeout_s": None,
             }
 
         if screen_id == "diag_restart_now":
@@ -287,7 +293,6 @@ class Renderer:
             raise ValueError(f"Top level YAML must be a mapping: {path}")
 
         return data
-
     def load_screen(self, screen_id: str) -> None:
         data = self.load_yaml(screen_id)
 
@@ -296,6 +301,11 @@ class Renderer:
 
         if was_scan_screen and not is_scan_screen:
             self.stop_scan_audio()
+            ok = self.gpio.light_off()
+            if not ok:
+                msg = self.gpio.last_error or "Failed to turn scan light OFF."
+                print(msg)
+                self.add_startup_error(msg)
 
         self.current_screen_id = screen_id
         self.current_screen_data = data
@@ -305,12 +315,16 @@ class Renderer:
 
         if is_scan_screen:
             self.start_scan_audio()
+            ok = self.gpio.light_on()
+            if not ok:
+                msg = self.gpio.last_error or "Failed to turn scan light ON."
+                print(msg)
+                self.add_startup_error(msg)
 
         print(f"\nLoaded screen: {screen_id}")
         print(data)
 
         self.refresh_watched_files()
-
     def resolve_animal_buttons(self, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         resolved: list[dict[str, Any]] = []
 
@@ -810,6 +824,10 @@ class Renderer:
 
 
 
+
+
+
+
     def draw_animal_button(
         self,
         button_cfg: dict[str, Any],
@@ -865,8 +883,6 @@ class Renderer:
 
         self.draw_image_into_rect(image_name, image_rect)
 
-
-        ##################
         if show_label:
             label_max_width = width - 18
             label_bottom = rect.bottom - max(6, outer_pad - 1)
@@ -876,10 +892,8 @@ class Renderer:
             label_font = pygame.font.SysFont(None, font_size)
             wrapped_lines = self.wrap_text(text, label_font, label_max_width)
 
-            # Shrink until it fits in width and height, but allow wrapping.
             while font_size > 16:
                 wrapped_lines = self.wrap_text(text, label_font, label_max_width)
-
                 too_many_lines = len(wrapped_lines) > 3
                 line_height = label_font.get_height()
                 total_height = len(wrapped_lines) * line_height + max(0, len(wrapped_lines) - 1) * line_gap
@@ -900,7 +914,7 @@ class Renderer:
                 surf_rect = surf.get_rect(centerx=rect.centerx, top=y)
                 self.display.blit(surf, surf_rect)
                 y = surf_rect.bottom + line_gap
-        #################
+
         self.current_buttons.append(
             ButtonSpec(
                 text=text,
@@ -908,7 +922,6 @@ class Renderer:
                 rect=rect,
             )
         )
-
     def draw_buttons(self, buttons_cfg: list[dict[str, Any]], *, t: float = 0.0, animate: bool = False) -> None:
         self.current_buttons = []
 
@@ -925,15 +938,12 @@ class Renderer:
         if count == 0:
             return
 
-        # Layout rules:
-        # - up to 5 buttons: one row
-        # - 6 or more buttons: two rows
         if count <= 5:
             rows = 1
             cols = count
         else:
             rows = 2
-            cols = (count + 1) // 2  # ceil(count / 2)
+            cols = (count + 1) // 2
 
         margin_x = 24
         bottom_margin = 34
@@ -976,8 +986,6 @@ class Renderer:
                     t=t,
                 )
                 index += 1
-
-
     def draw_split_main_screen(self) -> bool:
         split_layout = self.current_screen_data.get("split_layout")
         if split_layout != "vertical":
@@ -1956,7 +1964,6 @@ class Renderer:
         if not code:
             return
 
-        #################
         if code == "DIAG":
             self.go_to_screen("diagnostics")
             return
@@ -1967,7 +1974,6 @@ class Renderer:
             if next_screen:
                 self.go_to_screen(str(next_screen))
                 return
-        ################
 
         for animal_id, animal in self.animals_data.items():
             if not isinstance(animal, dict):
@@ -1978,7 +1984,6 @@ class Renderer:
                 return
 
         print(f"Unknown code: {code}")
-
     def check_timeout(self) -> None:
         timeout_s = self.current_screen_data.get("timeout_s")
         timeout_next = self.current_screen_data.get("timeout_next")
@@ -2062,76 +2067,72 @@ class Renderer:
         image_name = self.current_screen_data.get("instruction_image")
         instruction_text = self.current_screen_data.get(
             "instruction_text",
-            "Put animal into the MRI",
+            "Please put the animal into the MRI",
         )
         show_code_entry = bool(self.current_screen_data.get("show_code_entry", True))
 
         margin = 14
         gap = 14
 
-        # Layout:
-        #   top: large image panel
-        #   bottom: single action band with text + Scan + Home
-        bottom_h = 150
-        image_rect = pygame.Rect(
-            margin,
-            margin,
-            self.screen_width - 2 * margin,
-            self.screen_height - (3 * margin) - bottom_h,
-        )
-        bottom_rect = pygame.Rect(
-            margin,
-            image_rect.bottom + margin,
-            self.screen_width - 2 * margin,
-            bottom_h,
-        )
+        left_w = int(self.screen_width * 0.58)
+        right_x = margin + left_w + gap
+        right_w = self.screen_width - right_x - margin
 
-        pygame.draw.rect(self.display, panel_fill, image_rect, border_radius=24)
-        pygame.draw.rect(self.display, panel_border, image_rect, width=4, border_radius=24)
-
-        pygame.draw.rect(self.display, panel_fill, bottom_rect, border_radius=24)
-        pygame.draw.rect(self.display, panel_border, bottom_rect, width=4, border_radius=24)
-
-        # Top image
-        inner_image = image_rect.inflate(-18, -18)
-        self.draw_image_into_rect(str(image_name) if image_name else None, inner_image)
-
-        # Bottom controls
-        button_d = 88
-        button_gap = 14
+        # Bottom-right row: Scan button on the left, Home button on the right.
+        button_d = max(66, min(92, int(right_w * 0.28)))
+        button_y = self.screen_height - margin - button_d
 
         home_rect = pygame.Rect(
-            bottom_rect.right - 18 - button_d,
-            bottom_rect.centery - button_d // 2,
+            right_x + right_w - button_d,
+            button_y,
             button_d,
             button_d,
         )
         scan_rect = pygame.Rect(
-            home_rect.left - button_gap - button_d,
-            bottom_rect.centery - button_d // 2,
+            home_rect.left - gap - button_d,
+            button_y,
             button_d,
             button_d,
         )
 
+        image_rect = pygame.Rect(
+            margin,
+            margin,
+            left_w,
+            self.screen_height - 2 * margin,
+        )
         text_rect = pygame.Rect(
-            bottom_rect.left + 24,
-            bottom_rect.top + 18,
-            scan_rect.left - bottom_rect.left - 40,
-            bottom_rect.height - 36,
+            right_x,
+            margin,
+            right_w,
+            scan_rect.top - gap - margin,
         )
 
-        body_font = pygame.font.SysFont(None, 42)
-        wrapped_lines = self.wrap_text(instruction_text, body_font, text_rect.width)
+        for rect in (image_rect, text_rect):
+            pygame.draw.rect(self.display, panel_fill, rect, border_radius=24)
+            pygame.draw.rect(self.display, panel_border, rect, width=4, border_radius=24)
 
-        line_height = body_font.get_height()
-        total_text_height = len(wrapped_lines) * line_height + max(0, len(wrapped_lines) - 1) * 8
-        y = text_rect.top + (text_rect.height - total_text_height) // 2
+        # Left panel image
+        inner_image = image_rect.inflate(-18, -18)
+        self.draw_image_into_rect(str(image_name) if image_name else None, inner_image)
 
+        # Right panel instruction text
+        title_font = pygame.font.SysFont(None, 52)
+        body_font = pygame.font.SysFont(None, 34)
+
+        title = "How to Scan"
+        title_surf = title_font.render(title, True, text_color)
+        title_rect = title_surf.get_rect(centerx=text_rect.centerx, top=text_rect.top + 20)
+        self.display.blit(title_surf, title_rect)
+
+        wrapped_lines = self.wrap_text(instruction_text, body_font, text_rect.width - 32)
+
+        y = title_rect.bottom + 24
         for line in wrapped_lines:
             surf = body_font.render(line, True, text_color)
-            rect = surf.get_rect(left=text_rect.left, top=y)
+            rect = surf.get_rect(left=text_rect.left + 16, top=y)
             self.display.blit(surf, rect)
-            y = rect.bottom + 8
+            y = rect.bottom + 10
 
         # Scan button
         self.draw_round_button(
@@ -2177,18 +2178,13 @@ class Renderer:
 
     ####################################
 
-
-    def usb_gpio_present(self) -> bool:
-        # Stub for now. Replace with real serial/USB GPIO detection.
-        # Example later: look for a specific COM port or handshake response.
-        return False
-
-    def set_light_strip(self, is_on: bool) -> bool:
-        # Stub for now. Replace with real USB GPIO command.
-        # Example later: send "LIGHT ON\n" or "LIGHT OFF\n" over serial.
-        print(f"LIGHT STRIP -> {'ON' if is_on else 'OFF'}")
-        return self.usb_gpio_present()
-
+    def add_startup_error(self, message: str) -> None:
+        message = str(message).strip()
+        if not message:
+            return
+        if message not in self.startup_errors:
+            self.startup_errors.append(message)
+        print(f"STARTUP ERROR: {message}")
     def play_mri_audio_once(self) -> bool:
         audio_path = self.assets_dir / self.scan_audio_file
         if not audio_path.exists():
@@ -2208,183 +2204,8 @@ class Renderer:
 
     def restart_pc(self) -> None:
         print("Restarting PC...")
-        # Windows restart:
+        self.gpio.close()
         os.system("shutdown /r /t 0")
-
-    #####################
-    def add_startup_error(self, message: str) -> None:
-        message = str(message).strip()
-        if not message:
-            return
-        if message not in self.startup_errors:
-            self.startup_errors.append(message)
-        print(f"STARTUP ERROR: {message}")
-
-    def detect_usb_gpio_port(self) -> str | None:
-        # First pass: look for likely Arduino-style ports
-        try:
-            ports = list(serial.tools.list_ports.comports())
-        except Exception as e:
-            self.add_startup_error(f"Could not enumerate serial ports: {e}")
-            return None
-
-        preferred_matches: list[str] = []
-        fallback_matches: list[str] = []
-
-        for port in ports:
-            desc = (port.description or "").lower()
-            manu = (port.manufacturer or "").lower()
-            hwid = (port.hwid or "").lower()
-
-            text = " ".join([desc, manu, hwid])
-
-            if any(key in text for key in ("arduino", "ch340", "usb serial", "cp210", "ftdi")):
-                preferred_matches.append(port.device)
-            else:
-                fallback_matches.append(port.device)
-
-        candidates = preferred_matches + fallback_matches
-
-        for device in candidates:
-            if self.probe_usb_gpio_port(device):
-                return device
-
-        return None
-
-    ###########
-    def probe_usb_gpio_port(self, device: str) -> bool:
-        try:
-            with serial.Serial(device, self.usb_gpio_baud, timeout=0.25) as ser:
-                # Opening the port resets many Arduinos.
-                time.sleep(2.0)
-
-                # Clear whatever was printed during boot.
-                ser.reset_input_buffer()
-                ser.reset_output_buffer()
-
-                # Ask for a handshake.
-                ser.write(b"PING\n")
-                ser.flush()
-
-                deadline = time.monotonic() + 2.0
-                lines: list[str] = []
-
-                while time.monotonic() < deadline:
-                    raw = ser.readline()
-                    if not raw:
-                        continue
-
-                    reply = raw.decode(errors="ignore").strip()
-                    if not reply:
-                        continue
-
-                    lines.append(reply)
-                    print(f"GPIO probe on {device}: {reply!r}")
-
-                    if reply.upper() == "OK":
-                        return True
-
-                msg = f"GPIO probe failed on {device}: no OK reply; got {lines!r}"
-                print(msg)
-                self.add_startup_error(msg)
-                return False
-
-        except Exception as e:
-            msg = f"GPIO probe failed on {device}: {e}"
-            print(msg)
-            self.add_startup_error(msg)
-            return False
-    ########
-    
-    def detect_usb_gpio_on_startup(self) -> None:
-        self.usb_gpio_port = self.detect_usb_gpio_port()
-        if self.usb_gpio_port:
-            print(f"USB GPIO detected on {self.usb_gpio_port}")
-        else:
-            self.add_startup_error("USB GPIO was not detected at startup.")
-
-    def usb_gpio_present(self) -> bool:
-        if self.usb_gpio_port and self.probe_usb_gpio_port(self.usb_gpio_port):
-            return True
-
-        self.usb_gpio_port = self.detect_usb_gpio_port()
-        return self.usb_gpio_port is not None
-
-    ##########
-    def send_usb_gpio_command(self, command: str) -> bool:
-        if not self.usb_gpio_present():
-            return False
-
-        try:
-            assert self.usb_gpio_port is not None
-            with serial.Serial(self.usb_gpio_port, self.usb_gpio_baud, timeout=0.25) as ser:
-                time.sleep(2.0)
-                ser.reset_input_buffer()
-                ser.reset_output_buffer()
-
-                ser.write((command.strip() + "\n").encode("utf-8"))
-                ser.flush()
-
-                deadline = time.monotonic() + 2.0
-                lines: list[str] = []
-
-                while time.monotonic() < deadline:
-                    raw = ser.readline()
-                    if not raw:
-                        continue
-
-                    reply = raw.decode(errors="ignore").strip()
-                    if not reply:
-                        continue
-
-                    lines.append(reply)
-                    print(f"GPIO command {command!r} -> {reply!r}")
-
-                    # Accept a matching acknowledgment, but also allow success
-                    # if the board is chatty and does not echo exactly.
-                    if reply.upper() in {
-                        command.strip().upper(),
-                        "OK",
-                        "LIGHT ON",
-                        "LIGHT OFF",
-                    }:
-                        return True
-
-                msg = f"GPIO command {command!r} failed on {self.usb_gpio_port}: got {lines!r}"
-                print(msg)
-                self.add_startup_error(msg)
-                return False
-
-        except Exception as e:
-            msg = f"Failed to send USB GPIO command {command!r}: {e}"
-            print(msg)
-            self.add_startup_error(msg)
-            return False
-    #########
-    def send_usb_gpio_command(self, command: str) -> bool:
-        if not self.usb_gpio_present():
-            return False
-
-        try:
-            assert self.usb_gpio_port is not None
-            with serial.Serial(self.usb_gpio_port, self.usb_gpio_baud, timeout=1) as ser:
-                time.sleep(1.2)
-                ser.reset_input_buffer()
-                ser.write((command.strip() + "\n").encode("utf-8"))
-                ser.flush()
-                reply = ser.readline().decode(errors="ignore").strip()
-                print(f"GPIO command {command!r} -> {reply!r}")
-                return True
-        except Exception as e:
-            print(f"Failed to send USB GPIO command {command!r}: {e}")
-            return False
-
-    def set_light_strip(self, is_on: bool) -> bool:
-        return self.send_usb_gpio_command("LIGHT ON" if is_on else "LIGHT OFF")
-
-    def shutdown(self):
-        print("Shutting down cleanly...")
-        pygame.quit()
 
     def run(self, start_screen: str = "main") -> None:
         self.load_screen(start_screen)
@@ -2409,5 +2230,15 @@ class Renderer:
             self.check_timeout()
             self.draw_screen()
             self.clock.tick(30)
-        self.shutdown()
+
+        try:
+            self.gpio.light_off()
+        except Exception:
+            pass
+
+        try:
+            self.gpio.close()
+        except Exception:
+            pass
+
         pygame.quit()
