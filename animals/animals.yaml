@@ -7,6 +7,11 @@ pig:
   photo: pig_photo.jpg
   instruction_image: Put_pig_into_MRI.png
   mri_image: pig_mri.jpg
+  prescription_title: "Diagnosis: Tummy Ache"
+  prescription_text: |
+    Give Snoots lots of water.
+    Make sure Snoots gets plenty of rest.
+    Come back for another scan tomorrow.
   fact_lines:
     - Pigs use their noses
     - to explore the world.

@@ -149,24 +149,20 @@ class Renderer:
                 "show_code_entry": show_code_entry,
             }
 
+        ####################
+
         if kind == "result":
             return {
-                "fullscreen_image": True,
+                "prescription_layout": True,
                 "image": mri_image,
-                "corner_button": {
-                    "text": str(animal.get("result_button_text", "")),
-                    "icon": animal.get("result_button_icon"),
-                    "next": "main",
-                    "corner": str(animal.get("result_button_corner", "top_left")),
-                    "bg_color": animal.get("result_button_bg_color", [30, 30, 40, 170]),
-                    "border_color": animal.get("result_button_border_color", [255, 255, 255, 180]),
-                    "text_color": animal.get("result_button_text_color", [255, 255, 255]),
-                },
+                "title": str(animal.get("prescription_title", "Prescription")),
+                "body": str(animal.get("prescription_text", "Help your animal heal!")),
                 "timeout_s": animal.get("result_timeout_s", 20),
                 "timeout_next": "main",
                 "show_code_entry": show_code_entry,
             }
 
+        ############
         raise ValueError(f"Unknown virtual screen kind: {kind}")
 
     def load_yaml(self, screen_id: str) -> dict[str, Any]:
@@ -1522,6 +1518,52 @@ class Renderer:
             surf_rect = surf.get_rect(center=draw_rect.center)
             self.display.blit(surf, surf_rect)
 
+    #############
+    def draw_rect_button(
+        self,
+        rect: pygame.Rect,
+        *,
+        fill_color: tuple[int, int, int],
+        border_color: tuple[int, int, int],
+        text: str,
+        text_color: tuple[int, int, int] = (20, 20, 20),
+        pulse: bool = False,
+    ) -> None:
+        draw_rect = rect.copy()
+
+        if pulse:
+            t = pygame.time.get_ticks() / 1000.0
+            grow_x = int(4 * math.sin(t * 4.0))
+            grow_y = int(3 * math.sin(t * 4.0))
+            draw_rect = pygame.Rect(
+                rect.x - grow_x // 2,
+                rect.y - grow_y // 2,
+                rect.width + grow_x,
+                rect.height + grow_y,
+            )
+
+        shadow_rect = draw_rect.move(4, 6)
+        pygame.draw.rect(self.display, (5, 12, 22), shadow_rect, border_radius=22)
+        pygame.draw.rect(self.display, fill_color, draw_rect, border_radius=22)
+        pygame.draw.rect(self.display, border_color, draw_rect, width=3, border_radius=22)
+
+        max_width = draw_rect.width - 24
+        max_height = draw_rect.height - 20
+
+        font_size = 52
+        while font_size > 14:
+            font = pygame.font.SysFont(None, font_size)
+            surf = font.render(text, True, text_color)
+            if surf.get_width() <= max_width and surf.get_height() <= max_height:
+                break
+            font_size -= 2
+
+        surf_rect = surf.get_rect(center=draw_rect.center)
+        self.display.blit(surf, surf_rect)
+
+
+    ##################
+
     def draw_animal_detail_screen(self) -> bool:
         if not str(self.current_screen_id).startswith("animal:"):
             return False
@@ -1574,12 +1616,16 @@ class Renderer:
             button_d,
             button_d,
         )
+
+        ##################
         next_rect = pygame.Rect(
-            home_rect.left - gap - button_d,
+            right_x,
             button_y,
-            button_d,
+            home_rect.left - gap - right_x,
             button_d,
         )
+
+        #############
 
         info_rect = pygame.Rect(
             right_x,
@@ -1643,15 +1689,16 @@ class Renderer:
             button_text = str(button_cfg.get("text", "Next"))
             next_screen = button_cfg.get("next")
 
-        self.draw_round_button(
+        #############
+        self.draw_rect_button(
             next_rect,
             fill_color=(160, 220, 60),
             border_color=(255, 255, 255),
             text=button_text,
             text_color=(30, 30, 30),
-            font=self.font_small,
             pulse=True,
         )
+        #############
         self.current_buttons.append(
             ButtonSpec(
                 text=button_text,
@@ -1812,6 +1859,11 @@ class Renderer:
             pygame.display.flip()
             return
 
+        ##########
+        if self.draw_prescription_screen():
+            return
+
+        ##########
         if bool(self.current_screen_data.get("fullscreen_image", False)):
             self.current_buttons = []
 
@@ -2109,13 +2161,14 @@ class Renderer:
             button_d,
             button_d,
         )
+        ##############
         scan_rect = pygame.Rect(
-            home_rect.left - gap - button_d,
+            right_x,
             button_y,
-            button_d,
+            home_rect.left - gap - right_x,
             button_d,
         )
-
+        #################
         image_rect = pygame.Rect(
             margin,
             margin,
@@ -2156,7 +2209,8 @@ class Renderer:
             y = rect.bottom + 10
 
         # Scan button
-        self.draw_round_button(
+        ##########
+        self.draw_rect_button(
             scan_rect,
             fill_color=(160, 220, 60),
             border_color=(255, 255, 255),
@@ -2164,6 +2218,7 @@ class Renderer:
             text_color=(30, 30, 30),
             pulse=True,
         )
+        ##############
         self.current_buttons.append(
             ButtonSpec(
                 text="Scan",
@@ -2247,6 +2302,117 @@ class Renderer:
         print("Restarting PC...")
         self.gpio.close()
         os.system("shutdown /r /t 0")
+    ###########
+    def draw_prescription_screen(self) -> bool:
+        if not self.current_screen_data.get("prescription_layout", False):
+            return False
+
+        text_color = self.get_color("text_color", (30, 30, 30))
+        panel_fill = (200, 225, 240)
+        panel_border = (255, 255, 255)
+        bg_color = self.get_color("bg_color", (34, 87, 122))
+        self.display.fill(bg_color)
+        self.current_buttons = []
+
+        title_text = self.get_text("title", "Prescription")
+        body_text = self.get_text("body", "")
+        image_name = self.current_screen_data.get("image")
+        show_code_entry = bool(self.current_screen_data.get("show_code_entry", True))
+
+        margin = 14
+        gap = 14
+
+        left_w = int(self.screen_width * 0.58)
+        right_x = margin + left_w + gap
+        right_w = self.screen_width - right_x - margin
+
+        button_d = max(66, min(92, int(right_w * 0.28)))
+        button_y = self.screen_height - margin - button_d
+
+        home_rect = pygame.Rect(
+            right_x + right_w - button_d,
+            button_y,
+            button_d,
+            button_d,
+        )
+
+        image_rect = pygame.Rect(
+            margin,
+            margin,
+            left_w,
+            self.screen_height - 2 * margin,
+        )
+
+        info_rect = pygame.Rect(
+            right_x,
+            margin,
+            right_w,
+            home_rect.top - gap - margin,
+        )
+
+        for rect in (image_rect, info_rect):
+            pygame.draw.rect(self.display, panel_fill, rect, border_radius=24)
+            pygame.draw.rect(self.display, panel_border, rect, width=4, border_radius=24)
+
+        inner_image = image_rect.inflate(-18, -18)
+        self.draw_image_into_rect(str(image_name) if image_name else None, inner_image)
+
+        title_font = pygame.font.SysFont(None, 52)
+        body_font = pygame.font.SysFont(None, 32)
+
+        title_lines = self.wrap_text(title_text, title_font, info_rect.width - 24)
+        y = info_rect.top + 18
+
+        for line in title_lines:
+            surf = title_font.render(line, True, text_color)
+            rect = surf.get_rect(centerx=info_rect.centerx, top=y)
+            self.display.blit(surf, rect)
+            y = rect.bottom + 8
+
+        if body_text.strip():
+            y += 6
+
+        for raw_line in body_text.splitlines():
+            wrapped_lines = self.wrap_text(raw_line, body_font, info_rect.width - 28)
+            if not wrapped_lines:
+                y += body_font.get_height() // 2
+                continue
+
+            for line in wrapped_lines:
+                surf = body_font.render(line, True, text_color)
+                rect = surf.get_rect(left=info_rect.left + 16, top=y)
+                self.display.blit(surf, rect)
+                y = rect.bottom + 8
+
+        self.draw_round_button(
+            home_rect,
+            fill_color=panel_fill,
+            border_color=panel_border,
+            text_color=(30, 30, 30),
+            icon_kind="home",
+        )
+        self.current_buttons.append(
+            ButtonSpec(
+                text="Home",
+                next_screen="main",
+                rect=home_rect,
+            )
+        )
+
+        if show_code_entry:
+            code_text = f"Code: {self.code_buffer}_"
+            surf = self.font_footer.render(code_text, True, (255, 255, 255))
+            rect = surf.get_rect(midbottom=(self.screen_width // 2, self.screen_height - 10))
+            self.display.blit(surf, rect)
+
+        pygame.display.flip()
+        return True
+
+
+
+
+
+    ############
 
     def run(self, start_screen: str = "main") -> None:
         self.load_screen(start_screen)
