@@ -6,7 +6,7 @@ from typing import Any
 import math
 import time
 import os
-
+import ctypes
 import pygame
 import yaml
 
@@ -2029,7 +2029,7 @@ class Renderer:
             first = self.current_buttons[0]
             if first.next_screen:
                 self.go_to_screen(first.next_screen)
-
+        ##########
     def submit_code(self) -> None:
         code = self.code_buffer.strip().upper()
         self.code_buffer = ""
@@ -2039,6 +2039,14 @@ class Renderer:
 
         if code == "DIAG":
             self.go_to_screen("diagnostics")
+            return
+
+        if code == "DISP_OFF":
+            self.display_off()
+            return
+
+        if code == "DISP_ON":
+            self.display_on()
             return
 
         barcode_map = self.current_screen_data.get("barcode_map", {})
@@ -2057,6 +2065,9 @@ class Renderer:
                 return
 
         print(f"Unknown code: {code}")
+
+
+    #############
     def check_timeout(self) -> None:
         timeout_s = self.current_screen_data.get("timeout_s")
         timeout_next = self.current_screen_data.get("timeout_next")
@@ -2302,6 +2313,79 @@ class Renderer:
         print("Restarting PC...")
         self.gpio.close()
         os.system("shutdown /r /t 0")
+
+    def display_off(self) -> None:
+        print("Turning display OFF...")
+        try:
+            HWND_BROADCAST = 0xFFFF
+            WM_SYSCOMMAND = 0x0112
+            SC_MONITORPOWER = 0xF170
+            MONITOR_OFF = 2
+
+            ctypes.windll.user32.SendMessageW(
+                HWND_BROADCAST,
+                WM_SYSCOMMAND,
+                SC_MONITORPOWER,
+                MONITOR_OFF,
+            )
+        except Exception as e:
+            print(f"Failed to turn display off: {e}")
+
+    def display_on(self) -> None:
+        print("Turning display ON...")
+        try:
+            # Small synthetic mouse movement usually wakes a monitor
+            class MOUSEINPUT(ctypes.Structure):
+                _fields_ = [
+                    ("dx", ctypes.c_long),
+                    ("dy", ctypes.c_long),
+                    ("mouseData", ctypes.c_ulong),
+                    ("dwFlags", ctypes.c_ulong),
+                    ("time", ctypes.c_ulong),
+                    ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+                ]
+
+            class INPUT(ctypes.Structure):
+                class _INPUT(ctypes.Union):
+                    _fields_ = [("mi", MOUSEINPUT)]
+
+                _anonymous_ = ("_input",)
+                _fields_ = [("type", ctypes.c_ulong), ("_input", _INPUT)]
+
+            INPUT_MOUSE = 0
+            MOUSEEVENTF_MOVE = 0x0001
+
+            extra = ctypes.c_ulong(0)
+
+            inp = INPUT()
+            inp.type = INPUT_MOUSE
+            inp.mi = MOUSEINPUT(
+                dx=1,
+                dy=0,
+                mouseData=0,
+                dwFlags=MOUSEEVENTF_MOVE,
+                time=0,
+                dwExtraInfo=ctypes.pointer(extra),
+            )
+
+            ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT))
+
+            # move back so cursor doesn't drift over repeated wakes
+            inp2 = INPUT()
+            inp2.type = INPUT_MOUSE
+            inp2.mi = MOUSEINPUT(
+                dx=-1,
+                dy=0,
+                mouseData=0,
+                dwFlags=MOUSEEVENTF_MOVE,
+                time=0,
+                dwExtraInfo=ctypes.pointer(extra),
+            )
+
+            ctypes.windll.user32.SendInput(1, ctypes.byref(inp2), ctypes.sizeof(INPUT))
+        except Exception as e:
+            print(f"Failed to turn display on: {e}")
+
     ###########
     def draw_prescription_screen(self) -> bool:
         if not self.current_screen_data.get("prescription_layout", False):

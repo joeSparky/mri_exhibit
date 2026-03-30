@@ -33,6 +33,11 @@ dog:
   photo: dog_photo.jpg
   instruction_image: Put_dog_into_MRI.png
   mri_image: dog_mri.png
+  prescription_title: "Diagnosis: Tummy Ache"
+  prescription_text: |
+    Give Spot lots of water.
+    Make sure Spot gets plenty of rest.
+    Come back for another scan tomorrow.
   fact_lines:
     - Dogs can hear sounds
     - that people cannot hear.
@@ -50,10 +55,16 @@ rabbit:
   name: Rabbit
   button_text: Rabbit
   barcode: RABBIT001
+  pet_name: Floppy
   menu_image: rabbit_button.jpg
   photo: rabbit_photo.png
   instruction_image: Put_rabbit_into_MRI.png
   mri_image: rabbit_mri.png
+  prescription_title: "Diagnosis: Tummy Ache"
+  prescription_text: |
+    Give Floppy lots of water.
+    Make sure Floppy gets plenty of rest.
+    Come back for another scan tomorrow.
   fact_lines:
     - Rabbits have long ears
     - and strong back legs.
@@ -75,6 +86,11 @@ cat:
   photo: cat_photo.jpg
   instruction_image: Put_cat_into_MRI.png
   mri_image: cat_mri.png
+  prescription_title: "Diagnosis: Tummy Ache"
+  prescription_text: |
+    Give Blue Eyes lots of water.
+    Make sure Blue Eyes gets plenty of rest.
+    Come back for another scan tomorrow.
   fact_lines:
     - Cats use their whiskers
     - to sense nearby objects.
@@ -102,6 +118,11 @@ alpaca:
   photo: alpaca_photo.jpg
   instruction_image: Put_alpaca_into_MRI.png
   mri_image: alpaca_mri.jpg
+  prescription_title: "Diagnosis: Tummy Ache"
+  prescription_text: |
+    Give Snuggles lots of water.
+    Make sure Snuggles gets plenty of rest.
+    Come back for another scan tomorrow.
   fact_lines:
     - Alpacas hum to talk
     - to each other.
@@ -123,6 +144,11 @@ sheep:
   photo: sheep_photo.jpg
   instruction_image: Put_sheep_into_MRI.png
   mri_image: sheep_mri.jpg
+  prescription_title: "Diagnosis: Tummy Ache"
+  prescription_text: |
+    Give Fluffies lots of water.
+    Make sure Fluffies gets plenty of rest.
+    Come back for another scan tomorrow.
   fact_lines:
     - Provide wool to
     - keep us warm.
@@ -144,6 +170,11 @@ goat:
   photo: goat_photo.jpg
   instruction_image: Put_goat_into_MRI.png
   mri_image: goat_mri.jpg
+  prescription_title: "Diagnosis: Tummy Ache"
+  prescription_text: |
+    Give Billy lots of water.
+    Make sure Billy gets plenty of rest.
+    Come back for another scan tomorrow.
   fact_lines:
     - Goats love to stand
     - on high places.
@@ -155,5 +186,3 @@ goat:
   result_timeout_s: 20
   result_button_text: Home
   result_button_corner: bottom_right
-
-
