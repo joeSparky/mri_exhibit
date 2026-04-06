@@ -21,7 +21,7 @@ class ButtonSpec:
 
 
 class Renderer:
-    def __init__(self, base_dir: Path, screen_width: int = 1200, screen_height: int = 800):
+    def __init__(self, base_dir: Path, screen_width: int = 1920, screen_height: int = 1080):
         self.base_dir = base_dir
         self.screens_dir = self.base_dir / "screens"
         self.assets_dir = self.base_dir / "assets"
@@ -29,6 +29,39 @@ class Renderer:
 
         self.screen_width = screen_width
         self.screen_height = screen_height
+
+        self.titleFontSize = 120
+        self.textFontSize = 60
+        self.buttonFontSize = 120
+        self.footerFontSize = 28
+        self.debugFontSize = 24
+
+        # 1920x1080-tuned layout constants
+        self.mainMenuMargin = 32
+        self.mainMenuGap = 28
+        self.mainMenuCompactGap = 22
+        self.mainMenuLeftPanelWidth2Col = 620
+        self.mainMenuLeftPanelWidth3Col = 500
+        self.mainMenuLeftPanelInnerPad = 20
+
+        self.profileMargin = 28
+        self.profileGap = 22
+        self.profileLeftWidth = 720
+        self.profilePetPanelHeight = 118
+        self.profileInfoPanelHeight = 280
+        self.profileImageInset = 22
+        self.profilePanelRadius = 24
+        self.profilePanelBorderWidth = 6
+
+        self.twoPanelMargin = 18
+        self.twoPanelGap = 18
+        self.twoPanelLeftWidth = 1080
+        self.twoPanelButtonDiameter = 112
+        self.twoPanelImageInset = 22
+        self.twoPanelPanelRadius = 24
+        self.twoPanelPanelBorderWidth = 4
+        self.twoPanelTextTopPad = 28
+        self.twoPanelTextSidePad = 22
 
         self.scan_audio_file = "scan_sound.wav"
         self.scan_audio_volume = 0.5
@@ -43,18 +76,14 @@ class Renderer:
             print(f"Audio init failed: {e}")
 
         pygame.display.set_caption("MRI Exhibit")
-        # self.display = pygame.display.set_mode((self.screen_width, self.screen_height))
-        self.display = pygame.display.set_mode((self.screen_width, self.screen_height)
-            , pygame.FULLSCREEN
-            #, display=1
-            )
+        self.display = pygame.display.set_mode(
+            (self.screen_width, self.screen_height),
+            pygame.FULLSCREEN,
+            # display=1,
+        )
         self.clock = pygame.time.Clock()
-
-        self.font_title = pygame.font.SysFont(None, 52)
-        self.font_body = pygame.font.SysFont(None, 30)
-        self.font_button = pygame.font.SysFont(None, 32)
-        self.font_footer = pygame.font.SysFont(None, 26)
-        self.font_small = pygame.font.SysFont(None, 22)
+        self._font_cache: dict[int, pygame.font.Font] = {}
+        self.refresh_fonts()
 
         self.running = True
         self.current_screen_id = ""
@@ -499,6 +528,121 @@ class Renderer:
             return ""
         return str(value)
 
+    def refresh_fonts(self) -> None:
+        self._font_cache = {}
+        self.font_title = self.get_font(self.titleFontSize)
+        self.font_body = self.get_font(self.textFontSize)
+        self.font_text = self.font_body
+        self.font_button = self.get_font(self.buttonFontSize)
+        self.font_footer = self.get_font(self.footerFontSize)
+        self.font_debug = self.get_font(self.debugFontSize)
+
+    def get_font(self, size: int) -> pygame.font.Font:
+        size = max(8, int(size))
+        font = self._font_cache.get(size)
+        if font is None:
+            font = pygame.font.SysFont(None, size)
+            self._font_cache[size] = font
+        return font
+
+    def fit_font_to_width(self, text: str, max_width: int, start_size: int, min_size: int = 18) -> pygame.font.Font:
+        size = max(min_size, int(start_size))
+        while size > min_size:
+            font = self.get_font(size)
+            if font.size(text)[0] <= max_width:
+                return font
+            size -= 2
+        return self.get_font(min_size)
+
+    def fit_font_to_box(
+        self,
+        text: str,
+        max_width: int,
+        max_height: int,
+        start_size: int,
+        min_size: int = 18,
+    ) -> pygame.font.Font:
+        size = max(min_size, int(start_size))
+        while size > min_size:
+            font = self.get_font(size)
+            surf = font.render(text, True, (0, 0, 0))
+            if surf.get_width() <= max_width and surf.get_height() <= max_height:
+                return font
+            size -= 2
+        return self.get_font(min_size)
+
+    def get_two_panel_layout(self) -> dict[str, pygame.Rect]:
+        margin = self.twoPanelMargin
+        gap = self.twoPanelGap
+        left_w = self.twoPanelLeftWidth
+        right_x = margin + left_w + gap
+        right_w = self.screen_width - right_x - margin
+        button_d = self.twoPanelButtonDiameter
+        button_y = self.screen_height - margin - button_d
+
+        home_rect = pygame.Rect(
+            right_x + right_w - button_d,
+            button_y,
+            button_d,
+            button_d,
+        )
+        action_rect = pygame.Rect(
+            right_x,
+            button_y,
+            home_rect.left - gap - right_x,
+            button_d,
+        )
+        image_rect = pygame.Rect(
+            margin,
+            margin,
+            left_w,
+            self.screen_height - 2 * margin,
+        )
+        info_rect = pygame.Rect(
+            right_x,
+            margin,
+            right_w,
+            action_rect.top - gap - margin,
+        )
+        return {
+            "image_rect": image_rect,
+            "info_rect": info_rect,
+            "action_rect": action_rect,
+            "home_rect": home_rect,
+        }
+
+    def get_profile_layout(self) -> dict[str, pygame.Rect]:
+        margin = self.profileMargin
+        gap = self.profileGap
+        left_w = self.profileLeftWidth
+        right_w = self.screen_width - margin * 2 - left_w - gap
+
+        pet_rect = pygame.Rect(margin, margin, left_w, self.profilePetPanelHeight)
+        photo_rect = pygame.Rect(
+            margin,
+            pet_rect.bottom + gap,
+            left_w,
+            self.screen_height - margin - (pet_rect.bottom + gap),
+        )
+        info_rect = pygame.Rect(
+            pet_rect.right + gap,
+            margin,
+            right_w,
+            self.profileInfoPanelHeight,
+        )
+        button_rect = pygame.Rect(
+            info_rect.left,
+            info_rect.bottom + gap,
+            right_w,
+            self.screen_height - margin - (info_rect.bottom + gap),
+        )
+        return {
+            "pet_rect": pet_rect,
+            "photo_rect": photo_rect,
+            "info_rect": info_rect,
+            "button_rect": button_rect,
+        }
+
     def wrap_text(self, text: str, font: pygame.font.Font, max_width: int) -> list[str]:
         if not text:
             return []
@@ -573,8 +717,29 @@ class Renderer:
 
         try:
             img = pygame.image.load(str(image_path)).convert_alpha()
-            img = pygame.transform.smoothscale(img, (rect.width, rect.height))
-            self.display.blit(img, rect)
+            src_w, src_h = img.get_size()
+
+            if src_w <= 0 or src_h <= 0 or rect.width <= 0 or rect.height <= 0:
+                pygame.draw.rect(self.display, (150, 160, 175), rect, border_radius=10)
+                return
+
+            # Preserve aspect ratio and fill the destination rect without distortion.
+            # This uses a "cover" fit: scale until the whole rect is filled, then crop
+            # the overflow evenly from the center.
+            scale = max(rect.width / src_w, rect.height / src_h)
+            scaled_w = max(1, int(round(src_w * scale)))
+            scaled_h = max(1, int(round(src_h * scale)))
+
+            img = pygame.transform.smoothscale(img, (scaled_w, scaled_h))
+
+            crop_rect = pygame.Rect(
+                max(0, (scaled_w - rect.width) // 2),
+                max(0, (scaled_h - rect.height) // 2),
+                rect.width,
+                rect.height,
+            )
+
+            self.display.blit(img, rect, crop_rect)
         except Exception as e:
             print(f"Failed to load image {image_path}: {e}")
             pygame.draw.rect(self.display, (150, 160, 175), rect, border_radius=10)
@@ -685,7 +850,7 @@ class Renderer:
         self.draw_image_in_circle(scan_image, center, image_diameter)
 
         # small caption below
-        caption_font = pygame.font.SysFont(None, 34)
+        caption_font = self.font_text
         caption = caption_font.render("Scanning...", True, text_color)
         caption_rect = caption.get_rect(center=(self.screen_width // 2, center[1] + spinner_outer_d // 2 + 34))
         self.display.blit(caption, caption_rect)
@@ -776,7 +941,7 @@ class Renderer:
             )
 
             # Active label inside scanner bay
-            scan_font = pygame.font.SysFont(None, 28)
+            scan_font = self.get_font(max(24, self.textFontSize - 6))
             label = scan_font.render("SCANNING...", True, (255, 255, 255))
             label_bg = pygame.Surface((label.get_width() + 20, label.get_height() + 10), pygame.SRCALPHA)
             label_bg.fill((180, 0, 0, 170))
@@ -877,7 +1042,7 @@ class Renderer:
         label_gap = 0
 
         if show_label:
-            label_band_h = max(30, min(50, height // 4))
+            label_band_h = max(50, min(80, height // 4))
             label_gap = max(6, min(10, height // 18))
 
         rect = pygame.Rect(x, y + bounce_y, width, height)
@@ -905,8 +1070,8 @@ class Renderer:
             label_bottom = rect.bottom - max(6, outer_pad - 1)
             line_gap = 2
 
-            font_size = max(20, min(32, label_band_h))
-            label_font = pygame.font.SysFont(None, font_size)
+            font_size = self.buttonFontSize
+            label_font = self.get_font(font_size)
             wrapped_lines = self.wrap_text(text, label_font, label_max_width)
 
             while font_size > 16:
@@ -920,7 +1085,7 @@ class Renderer:
                     break
 
                 font_size -= 2
-                label_font = pygame.font.SysFont(None, font_size)
+                label_font = self.get_font(font_size)
 
             line_height = label_font.get_height()
             total_height = len(wrapped_lines) * line_height + max(0, len(wrapped_lines) - 1) * line_gap
@@ -1020,22 +1185,18 @@ class Renderer:
         count = min(len(buttons_cfg), 6)
         compact_grid = count > 4
 
-        margin = 24
-        gap = 24 if not compact_grid else 18
+        margin = self.mainMenuMargin
+        gap = self.mainMenuGap if not compact_grid else self.mainMenuCompactGap
         content_height = self.screen_height - 2 * margin
         usable_total_width = self.screen_width - 2 * margin
 
         cols = 2 if count <= 4 else 3 if count > 0 else 2
 
-        # Make the left panel visually comparable to one button column.
-        if cols == 2:
-            default_left_panel_width = int(usable_total_width * 0.34)
-        else:
-            default_left_panel_width = int(usable_total_width * 0.25)
-
-        left_panel_width = int(
-            self.current_screen_data.get("left_panel_width", default_left_panel_width)
+        default_left_panel_width = (
+            self.mainMenuLeftPanelWidth2Col if cols == 2 else self.mainMenuLeftPanelWidth3Col
         )
+
+        left_panel_width = int(self.current_screen_data.get("left_panel_width", default_left_panel_width))
         right_panel_width = usable_total_width - left_panel_width - gap
 
         # Center the full two-panel composition as a single layout.
@@ -1068,7 +1229,7 @@ class Renderer:
         scan_image = scan_panel.get("image")
 
         text_color = self.get_color("text_color", (255, 255, 255))
-        body_font = self.font_body if not compact_grid else pygame.font.SysFont(None, 26)
+        body_font = self.font_body if not compact_grid else self.get_font(max(26, self.textFontSize - 8))
 
         # Left panel content
         image_height_ratio = 0.58 if not compact_grid else 0.52
@@ -1083,9 +1244,9 @@ class Renderer:
         y = left_rect.top + (left_rect.height - total_height) // 2
 
         image_rect = pygame.Rect(
-            left_rect.left + 16,
+            left_rect.left + self.mainMenuLeftPanelInnerPad,
             y,
-            left_rect.width - 32,
+            left_rect.width - self.mainMenuLeftPanelInnerPad * 2,
             image_height,
         )
         self.draw_scanner_panel(image_rect, scan_image, t)
@@ -1206,7 +1367,7 @@ class Renderer:
 
         text_color = self.get_color("text_color", (255, 255, 255))
 
-        body_font = self.font_body if not compact_grid else pygame.font.SysFont(None, 26)
+        body_font = self.font_body if not compact_grid else self.get_font(max(26, self.textFontSize - 8))
 
         # --- Compute sizes first ---
         image_height_ratio = 0.58 if not compact_grid else 0.52
@@ -1361,10 +1522,8 @@ class Renderer:
             seg.center = (x, y)
             pygame.draw.ellipse(self.display, (49, 101, 144), seg)
 
-        label = self.font_button.render(text, True, (64, 125, 54))
-        if label.get_width() > center_rect.width - 18:
-            scale_font = pygame.font.SysFont(None, 28)
-            label = scale_font.render(text, True, (64, 125, 54))
+        button_font = self.fit_font_to_box(text, center_rect.width - 18, center_rect.height - 12, self.buttonFontSize, 20)
+        label = button_font.render(text, True, (64, 125, 54))
         label_rect = label.get_rect(center=center_rect.center)
         self.display.blit(label, label_rect)
 
@@ -1380,38 +1539,34 @@ class Renderer:
         self.display.fill(bg_color)
         self.current_buttons = []
 
-        margin = 22
-        gutter = 18
-        left_w = 470
-        right_w = self.screen_width - margin * 2 - left_w - gutter
-        top_h = 94
-        bottom_h = self.screen_height - margin * 2 - top_h - gutter
-
-        pet_rect = pygame.Rect(margin, margin, left_w, top_h)
-        photo_rect = pygame.Rect(margin, pet_rect.bottom + gutter, left_w, bottom_h)
-        info_rect = pygame.Rect(pet_rect.right + gutter, margin, right_w, 210)
-        button_rect = pygame.Rect(info_rect.left, info_rect.bottom + gutter, right_w, self.screen_height - margin - (info_rect.bottom + gutter))
+        layout = self.get_profile_layout()
+        pet_rect = layout["pet_rect"]
+        photo_rect = layout["photo_rect"]
+        info_rect = layout["info_rect"]
+        button_rect = layout["button_rect"]
 
         for rect in (pet_rect, photo_rect, info_rect):
-            pygame.draw.rect(self.display, panel_fill, rect, border_radius=22)
-            pygame.draw.rect(self.display, panel_border, rect, width=6, border_radius=22)
+            pygame.draw.rect(self.display, panel_fill, rect, border_radius=self.profilePanelRadius)
+            pygame.draw.rect(
+                self.display,
+                panel_border,
+                rect,
+                width=self.profilePanelBorderWidth,
+                border_radius=self.profilePanelRadius,
+            )
 
         pet_name = self.get_text("pet_name", self.get_text("title", ""))
-        pet_font = pygame.font.SysFont(None, 64)
+        pet_font = self.fit_font_to_width(pet_name, pet_rect.width - 32, self.titleFontSize, 34)
         pet_surf = pet_font.render(pet_name, True, text_color)
-        while pet_surf.get_width() > pet_rect.width - 32 and pet_font.get_height() > 34:
-            size = max(34, pet_font.get_height() - 4)
-            pet_font = pygame.font.SysFont(None, size)
-            pet_surf = pet_font.render(pet_name, True, text_color)
         pet_text_rect = pet_surf.get_rect(center=pet_rect.center)
         self.display.blit(pet_surf, pet_text_rect)
 
-        image_inner = photo_rect.inflate(-18, -18)
+        image_inner = photo_rect.inflate(-self.profileImageInset, -self.profileImageInset)
         self.draw_image_into_rect(self.current_screen_data.get("image"), image_inner)
         pygame.draw.rect(self.display, panel_border, image_inner, width=4, border_radius=16)
 
         animal_name = self.get_text("title", "")
-        name_font = pygame.font.SysFont(None, 34)
+        name_font = self.fit_font_to_width(animal_name, info_rect.width - 28, self.titleFontSize, 28)
         name_lines = self.wrap_text(animal_name, name_font, info_rect.width - 28)
 
         total_height = sum(name_font.size(line)[1] + 2 for line in name_lines)
@@ -1428,7 +1583,7 @@ class Renderer:
             body_text = self.get_text("body", "")
             facts = [line for line in body_text.splitlines() if line.strip()]
 
-        fact_font = pygame.font.SysFont(None, 28)
+        fact_font = self.font_text
         y += 10
         for raw_line in facts:
             for line in self.wrap_text(str(raw_line), fact_font, info_rect.width - 30):
@@ -1452,7 +1607,7 @@ class Renderer:
             rect = surf.get_rect(midbottom=(self.screen_width // 2, self.screen_height - 10))
             self.display.blit(surf, rect)
 
-        small = self.font_small.render(f"screen: {self.current_screen_id}", True, (255, 255, 255))
+        small = self.font_debug.render(f"screen: {self.current_screen_id}", True, (255, 255, 255))
         small_rect = small.get_rect(left=10, bottom=self.screen_height - 10)
         self.display.blit(small, small_rect)
 
@@ -1505,16 +1660,8 @@ class Renderer:
             max_width = draw_rect.width - 20
             max_height = draw_rect.height - 20
 
-            font_size = 48  # start big
-            while font_size > 12:
-                test_font = pygame.font.SysFont(None, font_size)
-                surf = test_font.render(text, True, text_color)
-
-                if surf.get_width() <= max_width and surf.get_height() <= max_height:
-                    break
-
-                font_size -= 2
-
+            font = self.fit_font_to_box(text, max_width, max_height, self.buttonFontSize, 12)
+            surf = font.render(text, True, text_color)
             surf_rect = surf.get_rect(center=draw_rect.center)
             self.display.blit(surf, surf_rect)
 
@@ -1550,14 +1697,8 @@ class Renderer:
         max_width = draw_rect.width - 24
         max_height = draw_rect.height - 20
 
-        font_size = 52
-        while font_size > 14:
-            font = pygame.font.SysFont(None, font_size)
-            surf = font.render(text, True, text_color)
-            if surf.get_width() <= max_width and surf.get_height() <= max_height:
-                break
-            font_size -= 2
-
+        font = self.fit_font_to_box(text, max_width, max_height, self.buttonFontSize, 14)
+        surf = font.render(text, True, text_color)
         surf_rect = surf.get_rect(center=draw_rect.center)
         self.display.blit(surf, surf_rect)
 
@@ -1581,76 +1722,52 @@ class Renderer:
         image_name = self.current_screen_data.get("image")
         show_code_entry = bool(self.current_screen_data.get("show_code_entry", True))
 
-        margin = 14
-        gap = 14
+        layout = self.get_two_panel_layout()
+        photo_rect = layout["image_rect"]
+        info_rect = layout["info_rect"]
+        next_rect = layout["action_rect"]
+        home_rect = layout["home_rect"]
 
-        left_w = int(self.screen_width * 0.58)
-        right_x = margin + left_w + gap
-        right_w = self.screen_width - right_x - margin
-
-        # Pet-name panel spans the full first column and is only as tall as needed
-        # for the fitted pet-name font.
-        pet_font_size = 48
-        pet_font = pygame.font.SysFont(None, pet_font_size)
-        while pet_font.size(pet_name)[0] > left_w - 28 and pet_font_size > 28:
-            pet_font_size -= 2
-            pet_font = pygame.font.SysFont(None, pet_font_size)
-
+        pet_font = self.fit_font_to_width(pet_name, photo_rect.width - 32, self.titleFontSize, 28)
         pet_surf = pet_font.render(pet_name, True, text_color)
-        pet_h = max(52, pet_surf.get_height() + 24)
+        pet_h = max(72, pet_surf.get_height() + 30)
 
-        pet_rect = pygame.Rect(margin, margin, left_w, pet_h)
+        pet_rect = pygame.Rect(
+            photo_rect.left,
+            self.twoPanelMargin,
+            photo_rect.width,
+            pet_h,
+        )
         photo_rect = pygame.Rect(
-            margin,
-            pet_rect.bottom + gap,
-            left_w,
-            self.screen_height - margin - (pet_rect.bottom + gap),
-        )
-
-        # Bottom-right row: circular Scan button on the left, Home button on the right.
-        button_d = max(66, min(92, int(right_w * 0.28)))
-        button_y = self.screen_height - margin - button_d
-        home_rect = pygame.Rect(
-            right_x + right_w - button_d,
-            button_y,
-            button_d,
-            button_d,
-        )
-
-        ##################
-        next_rect = pygame.Rect(
-            right_x,
-            button_y,
-            home_rect.left - gap - right_x,
-            button_d,
-        )
-
-        #############
-
-        info_rect = pygame.Rect(
-            right_x,
-            margin,
-            right_w,
-            next_rect.top - gap - margin,
+            photo_rect.left,
+            pet_rect.bottom + self.twoPanelGap,
+            photo_rect.width,
+            self.screen_height - self.twoPanelMargin - (pet_rect.bottom + self.twoPanelGap),
         )
 
         for rect in (pet_rect, photo_rect, info_rect):
-            pygame.draw.rect(self.display, panel_fill, rect, border_radius=24)
-            pygame.draw.rect(self.display, panel_border, rect, width=4, border_radius=24)
+            pygame.draw.rect(self.display, panel_fill, rect, border_radius=self.twoPanelPanelRadius)
+            pygame.draw.rect(
+                self.display,
+                panel_border,
+                rect,
+                width=self.twoPanelPanelBorderWidth,
+                border_radius=self.twoPanelPanelRadius,
+            )
 
         # Pet name: single fitted line.
         pet_text_rect = pet_surf.get_rect(center=pet_rect.center)
         self.display.blit(pet_surf, pet_text_rect)
 
         # Photo
-        inner_photo = photo_rect.inflate(-18, -18)
+        inner_photo = photo_rect.inflate(-self.twoPanelImageInset, -self.twoPanelImageInset)
         self.draw_image_into_rect(str(image_name) if image_name else None, inner_photo)
 
         # Animal info
         ####################
         # --- Larger fonts for 1200x800 ---
-        name_font = pygame.font.SysFont(None, 52)
-        info_font = pygame.font.SysFont(None, 32)
+        name_font = self.font_title
+        info_font = self.font_text
 
         # --- Wrap text ---
         name_lines = self.wrap_text(animal_name, name_font, info_rect.width - 24)
@@ -1661,7 +1778,7 @@ class Renderer:
             fact_lines_wrapped.extend(wrapped)
 
         # --- TOP-ALIGNED layout ---
-        y = info_rect.top + 18  # <-- anchor near top
+        y = info_rect.top + self.twoPanelTextTopPad
 
         # --- Draw title ---
         for line in name_lines:
@@ -1677,7 +1794,7 @@ class Renderer:
         # --- Draw facts ---
         for wrapped in fact_lines_wrapped:
             surf = info_font.render(wrapped, True, text_color)
-            rect = surf.get_rect(left=info_rect.x + 16, top=y)
+            rect = surf.get_rect(left=info_rect.x + self.twoPanelTextSidePad, top=y)
             self.display.blit(surf, rect)
             y = rect.bottom + 8
 
@@ -1822,7 +1939,7 @@ class Renderer:
                 print(f"Failed to load corner icon {image_path}: {e}")
 
         if not drew_content and text:
-            font = pygame.font.SysFont(None, 34)
+            font = self.fit_font_to_box(text, rect.width - 14, rect.height - 14, self.buttonFontSize, 18)
             surf = font.render(text, True, text_color)
             surf_rect = surf.get_rect(center=rect.center)
             self.display.blit(surf, surf_rect)
@@ -2010,7 +2127,7 @@ class Renderer:
             rect = surf.get_rect(midbottom=(self.screen_width // 2, self.screen_height - 16))
             self.display.blit(surf, rect)
 
-        small = self.font_small.render(f"screen: {self.current_screen_id}", True, text_color)
+        small = self.font_debug.render(f"screen: {self.current_screen_id}", True, text_color)
         small_rect = small.get_rect(left=10, bottom=self.screen_height - 10)
         self.display.blit(small, small_rect)
 
@@ -2155,59 +2272,33 @@ class Renderer:
         )
         show_code_entry = bool(self.current_screen_data.get("show_code_entry", True))
 
-        margin = 14
-        gap = 14
-
-        left_w = int(self.screen_width * 0.58)
-        right_x = margin + left_w + gap
-        right_w = self.screen_width - right_x - margin
-
-        # Bottom-right row: Scan button on the left, Home button on the right.
-        button_d = max(66, min(92, int(right_w * 0.28)))
-        button_y = self.screen_height - margin - button_d
-
-        home_rect = pygame.Rect(
-            right_x + right_w - button_d,
-            button_y,
-            button_d,
-            button_d,
-        )
-        ##############
-        scan_rect = pygame.Rect(
-            right_x,
-            button_y,
-            home_rect.left - gap - right_x,
-            button_d,
-        )
-        #################
-        image_rect = pygame.Rect(
-            margin,
-            margin,
-            left_w,
-            self.screen_height - 2 * margin,
-        )
-        text_rect = pygame.Rect(
-            right_x,
-            margin,
-            right_w,
-            scan_rect.top - gap - margin,
-        )
+        layout = self.get_two_panel_layout()
+        image_rect = layout["image_rect"]
+        text_rect = layout["info_rect"]
+        scan_rect = layout["action_rect"]
+        home_rect = layout["home_rect"]
 
         for rect in (image_rect, text_rect):
-            pygame.draw.rect(self.display, panel_fill, rect, border_radius=24)
-            pygame.draw.rect(self.display, panel_border, rect, width=4, border_radius=24)
+            pygame.draw.rect(self.display, panel_fill, rect, border_radius=self.twoPanelPanelRadius)
+            pygame.draw.rect(
+                self.display,
+                panel_border,
+                rect,
+                width=self.twoPanelPanelBorderWidth,
+                border_radius=self.twoPanelPanelRadius,
+            )
 
         # Left panel image
-        inner_image = image_rect.inflate(-18, -18)
+        inner_image = image_rect.inflate(-self.twoPanelImageInset, -self.twoPanelImageInset)
         self.draw_image_into_rect(str(image_name) if image_name else None, inner_image)
 
         # Right panel instruction text
-        title_font = pygame.font.SysFont(None, 52)
-        body_font = pygame.font.SysFont(None, 34)
+        title_font = self.font_title
+        body_font = self.font_text
 
         title = "How to Scan"
         title_surf = title_font.render(title, True, text_color)
-        title_rect = title_surf.get_rect(centerx=text_rect.centerx, top=text_rect.top + 20)
+        title_rect = title_surf.get_rect(centerx=text_rect.centerx, top=text_rect.top + self.twoPanelTextTopPad)
         self.display.blit(title_surf, title_rect)
 
         wrapped_lines = self.wrap_text(instruction_text, body_font, text_rect.width - 32)
@@ -2215,7 +2306,7 @@ class Renderer:
         y = title_rect.bottom + 24
         for line in wrapped_lines:
             surf = body_font.render(line, True, text_color)
-            rect = surf.get_rect(left=text_rect.left + 16, top=y)
+            rect = surf.get_rect(left=text_rect.left + self.twoPanelTextSidePad, top=y)
             self.display.blit(surf, rect)
             y = rect.bottom + 10
 
@@ -2403,49 +2494,29 @@ class Renderer:
         image_name = self.current_screen_data.get("image")
         show_code_entry = bool(self.current_screen_data.get("show_code_entry", True))
 
-        margin = 14
-        gap = 14
-
-        left_w = int(self.screen_width * 0.58)
-        right_x = margin + left_w + gap
-        right_w = self.screen_width - right_x - margin
-
-        button_d = max(66, min(92, int(right_w * 0.28)))
-        button_y = self.screen_height - margin - button_d
-
-        home_rect = pygame.Rect(
-            right_x + right_w - button_d,
-            button_y,
-            button_d,
-            button_d,
-        )
-
-        image_rect = pygame.Rect(
-            margin,
-            margin,
-            left_w,
-            self.screen_height - 2 * margin,
-        )
-
-        info_rect = pygame.Rect(
-            right_x,
-            margin,
-            right_w,
-            home_rect.top - gap - margin,
-        )
+        layout = self.get_two_panel_layout()
+        image_rect = layout["image_rect"]
+        info_rect = layout["info_rect"]
+        home_rect = layout["home_rect"]
 
         for rect in (image_rect, info_rect):
-            pygame.draw.rect(self.display, panel_fill, rect, border_radius=24)
-            pygame.draw.rect(self.display, panel_border, rect, width=4, border_radius=24)
+            pygame.draw.rect(self.display, panel_fill, rect, border_radius=self.twoPanelPanelRadius)
+            pygame.draw.rect(
+                self.display,
+                panel_border,
+                rect,
+                width=self.twoPanelPanelBorderWidth,
+                border_radius=self.twoPanelPanelRadius,
+            )
 
-        inner_image = image_rect.inflate(-18, -18)
+        inner_image = image_rect.inflate(-self.twoPanelImageInset, -self.twoPanelImageInset)
         self.draw_image_into_rect(str(image_name) if image_name else None, inner_image)
 
-        title_font = pygame.font.SysFont(None, 52)
-        body_font = pygame.font.SysFont(None, 32)
+        title_font = self.font_title
+        body_font = self.font_text
 
         title_lines = self.wrap_text(title_text, title_font, info_rect.width - 24)
-        y = info_rect.top + 18
+        y = info_rect.top + self.twoPanelTextTopPad
 
         for line in title_lines:
             surf = title_font.render(line, True, text_color)
@@ -2464,7 +2535,7 @@ class Renderer:
 
             for line in wrapped_lines:
                 surf = body_font.render(line, True, text_color)
-                rect = surf.get_rect(left=info_rect.left + 16, top=y)
+                rect = surf.get_rect(left=info_rect.left + self.twoPanelTextSidePad, top=y)
                 self.display.blit(surf, rect)
                 y = rect.bottom + 8
 
