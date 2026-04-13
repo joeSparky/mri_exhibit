@@ -26,7 +26,8 @@ Python-based touch-screen exhibit for a museum MRI activity.
 
 ## Setup on Windows 10
 * Install python 3.12 from python.org
-* Create a virtual environment with "py -3.12 -m venv venv"
+* Create a virtual environment with "python -m venv venv"
+* Activate the environment with "venv\Scripts\activate"
 * get the latest pip with "python -m pip install --upgrade pip'
 * get the required packages with "pip install -r requirements.txt"
 * run the program "python main.py"

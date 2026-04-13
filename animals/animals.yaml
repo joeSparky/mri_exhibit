@@ -5,7 +5,7 @@ pig:
   barcode: 13
   menu_image: pig_button.jpg
   photo: pig_photo.jpg
-  instruction_image: Put_pig_into_MRI.png
+  instruction_image: PigIntoMRI.jpg
   mri_image: pig_mri.jpg
   prescription_title: "Diagnosis: Tummy Ache"
   prescription_text: |
@@ -18,7 +18,7 @@ pig:
   scan_prompt: Let's take an MRI
   scan_title: .
   scan_body: Please hold still!
-  scan_duration_s: 4
+  scan_duration_s: 8
   animal_timeout_s: 40
   result_timeout_s: 20
   result_button_text: Home
@@ -29,10 +29,10 @@ dog:
   pet_name: Spot
   button_text: Dog
   barcode: 15
-  menu_image: goldenPup_button.jpg
+  menu_image: dog_button.jpg
   photo: dog_photo.jpg
-  instruction_image: Put_dog_into_MRI.png
-  mri_image: dog_mri.png
+  instruction_image: DogIntoMRI.jpg
+  mri_image: DogX2.png
   prescription_title: "Diagnosis: Tummy Ache"
   prescription_text: |
     Give Spot lots of water.
@@ -44,7 +44,7 @@ dog:
   scan_prompt: Scan
   scan_title: Scanning...
   scan_body: Please hold still!
-  scan_duration_s: 4
+  scan_duration_s: 8
   animal_timeout_s: 40
   result_timeout_s: 20
   result_button_text: ""
@@ -71,7 +71,7 @@ rabbit:
   scan_prompt: Let's take an MRI
   scan_title: Scanning...
   scan_body: Please hold still!
-  scan_duration_s: 4
+  scan_duration_s: 8
   animal_timeout_s: 40
   result_timeout_s: 20
   result_button_text: Home
@@ -84,8 +84,8 @@ cat:
   barcode: 11
   menu_image: cat_button.jpg
   photo: cat_photo.jpg
-  instruction_image: Put_cat_into_MRI.png
-  mri_image: cat_mri.png
+  instruction_image: CatIntoMRI.jpg
+  mri_image: CatX2.png
   prescription_title: "Diagnosis: Tummy Ache"
   prescription_text: |
     Give Blue Eyes lots of water.
@@ -103,7 +103,7 @@ cat:
   scan_prompt: Let's take an MRI
   scan_title: Scanning...
   scan_body: Please hold still!
-  scan_duration_s: 4
+  scan_duration_s: 8
   animal_timeout_s: 40
   result_timeout_s: 20
   result_button_text: Home
@@ -116,11 +116,11 @@ alpaca:
   barcode: 10
   menu_image: alpaca_button.jpg
   photo: alpaca_photo.jpg
-  instruction_image: Put_alpaca_into_MRI.png
+  instruction_image: AlpacaIntoMRI.jpg
   mri_image: alpaca_mri.jpg
   prescription_title: "Diagnosis: Tummy Ache"
   prescription_text: |
-    Give Snuggles lots of water.
+    Snuggles sprained her neck.
     Make sure Snuggles gets plenty of rest.
     Come back for another scan tomorrow.
   fact_lines:
@@ -129,7 +129,7 @@ alpaca:
   scan_prompt: Let's take an MRI
   scan_title: Scanning...
   scan_body: Please hold still!
-  scan_duration_s: 4
+  scan_duration_s: 8
   animal_timeout_s: 40
   result_timeout_s: 20
   result_button_text: Home
@@ -142,8 +142,8 @@ sheep:
   barcode: 12
   menu_image: sheep_button.jpg
   photo: sheep_photo.jpg
-  instruction_image: Put_sheep_into_MRI.png
-  mri_image: sheep_mri.jpg
+  instruction_image: SheepIntoMRI.jpg
+  mri_image: SheepX.png
   prescription_title: "Diagnosis: Tummy Ache"
   prescription_text: |
     Give Fluffies lots of water.
@@ -155,7 +155,7 @@ sheep:
   scan_prompt: Let's take an MRI
   scan_title: Scanning...
   scan_body: Please hold still!
-  scan_duration_s: 4
+  scan_duration_s: 8
   animal_timeout_s: 40
   result_timeout_s: 20
   result_button_text: Home
@@ -168,8 +168,8 @@ goat:
   barcode: 14
   menu_image: goat_button.jpg
   photo: goat_photo.jpg
-  instruction_image: Put_goat_into_MRI.png
-  mri_image: goat_mri.jpg
+  instruction_image: GoatIntoMRI.jpg
+  mri_image: GoatX.png
   prescription_title: "Diagnosis: Tummy Ache"
   prescription_text: |
     Give Billy lots of water.
@@ -181,7 +181,30 @@ goat:
   scan_prompt: Let's take an MRI
   scan_title: Scanning...
   scan_body: Please hold still!
-  scan_duration_s: 4
+  scan_duration_s: 8
+  animal_timeout_s: 40
+  result_timeout_s: 20
+  result_button_text: Home
+  result_button_corner: bottom_right
+
+cow:
+  name: Cow
+  button_text: Cow
+  pet_name: Betsy
+  barcode: cow
+  menu_image: Cow.jpg
+  photo: cowPhoto.jpg
+  instruction_image: CowIntoMRI.png
+  mri_image: CowX.png
+  prescription_title: "Diagnosis: Hungry"
+  prescription_text: |
+    Give Betsy lots of grass
+  fact_lines:
+    - Cows give us tasty milk
+  scan_prompt: Let's take an MRI
+  scan_title: Scanning...
+  scan_body: Please hold still!
+  scan_duration_s: 8
   animal_timeout_s: 40
   result_timeout_s: 20
   result_button_text: Home
