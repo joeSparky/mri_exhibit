@@ -10,7 +10,12 @@ import ctypes
 import pygame
 import yaml
 
-from .usb_gpio import UsbGpio
+import sys
+
+if sys.platform.startswith("win"):
+    from .usb_gpio import UsbGpio as GpioBackend
+else:
+    from .rpi_gpio import RpiGpio as GpioBackend
 
 
 @dataclass
@@ -99,7 +104,7 @@ class Renderer:
 
         self.animals_data = self.load_animals()
         self.startup_errors: list[str] = []
-        self.gpio = UsbGpio()
+        self.gpio = GpioBackend()
 
         if not self.gpio.open():
             self.add_startup_error(self.gpio.last_error or "USB GPIO was not detected at startup.")
@@ -202,9 +207,9 @@ class Renderer:
 
         if screen_id == "diagnostics":
             gpio_ok = self.gpio.is_present()
-            gpio_text = f"USB GPIO: {'Present' if gpio_ok else 'Not found'}"
+            gpio_text = f"Light GPIO: {'Present' if gpio_ok else 'Not found'}"
             if gpio_ok and getattr(self.gpio, "port", None):
-                gpio_text = f"USB GPIO: Present ({self.gpio.port})"
+                gpio_text = f"Light GPIO: Present ({self.gpio.port})"
 
             return {
                 "title": "Diagnostics",
@@ -226,12 +231,12 @@ class Renderer:
         if screen_id == "diag_gpio_status":
             gpio_ok = self.gpio.is_present()
             if gpio_ok and getattr(self.gpio, "port", None):
-                body = f"USB GPIO is present on {self.gpio.port}."
+                body = f"Light GPIO is present on {self.gpio.port}."
             else:
-                body = self.gpio.last_error or "USB GPIO is not found."
+                body = self.gpio.last_error or "Light GPIO is not found."
 
             return {
-                "title": "USB GPIO Status",
+                "title": "Light GPIO Status",
                 "body": body,
                 "button": {"text": "Back", "next": "diagnostics"},
                 "show_code_entry": True,

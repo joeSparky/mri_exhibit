@@ -32,5 +32,13 @@ Python-based touch-screen exhibit for a museum MRI activity.
 * get the required packages with "pip install -r requirements.txt"
 * run the program "python main.py"
 
-## Notes
-This project is under active development.
+## rPi Debian
+* Install python 3.13.5 from python.org. Later versions don't work.
+  Check with "python --version"
+* Create a virtual environment with "python -m venv venv"
+* activate the environment with ". venv/bin/activate"
+  Note the "(venv)" at the beginning of the prompt
+* get the required packages with "pip install -r requirements.txt"
+* install the RPi GPIO with "pip install RPi.GPIO"
+* run the program with "python main.py"
+
