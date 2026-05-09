@@ -6,15 +6,20 @@ pig:
   menu_image: pig_button.jpg
   photo: pig_photo.jpg
   instruction_image: PigIntoMRI.jpg
-  mri_image: pig_mri.jpg
-  prescription_title: "Diagnosis: Tummy Ache"
+  mri_image: pig_mri2.png
+  prescription_title: "Diagnosis:\nTwo Broken Ribs"
   prescription_text: |
-    Give Snoots lots of water.
+    Wrap Snoots in a blanket.
+
     Make sure Snoots gets plenty of rest.
-    Come back for another scan tomorrow.
+
+    Call the vet if Snoots gets worse.
   fact_lines:
-    - Pigs use their noses
-    - to explore the world.
+    - Pigs use their noses to find food.
+    - " "
+    - Pigs can learn tricks, solve puzzles, and play simple video games with joysticks!
+    - " "
+    - Pigs don't sweat much, so they roll in mud to protect their skin and cool off.
   scan_prompt: Let's take an MRI
   scan_title: .
   scan_body: Please hold still!
@@ -32,15 +37,22 @@ dog:
   menu_image: dog_button.jpg
   photo: dog_photo.jpg
   instruction_image: DogIntoMRI.jpg
-  mri_image: DogX2.png
-  prescription_title: "Diagnosis: Tummy Ache"
+  mri_image: DogX3.png
+  prescription_title: "Diagnosis:\nBroken Leg"
   prescription_text: |
-    Give Spot lots of water.
-    Make sure Spot gets plenty of rest.
-    Come back for another scan tomorrow.
+    Make a cast for Spot's leg.
+
+    Carry Spot where he want's to go.
+
+    Give him lots of gentle hugs.
+
+    Come back in two weeks.
   fact_lines:
-    - Dogs can hear sounds
-    - that people cannot hear.
+    - Dogs can hear sounds that people cannot hear.
+    - " "
+    - Dog's noses are 1000 times better than humans.
+    - " "
+    - Every dog's nose print is unique.
   scan_prompt: Scan
   scan_title: Scanning...
   scan_body: Please hold still!
@@ -79,18 +91,22 @@ rabbit:
 
 cat:
   name: Cat
-  pet_name: Blue Eyes
+  pet_name: Cally
   button_text: Cat
   barcode: 11
   menu_image: cat_button.jpg
   photo: cat_photo.jpg
   instruction_image: CatIntoMRI.jpg
-  mri_image: CatX2.png
-  prescription_title: "Diagnosis: Tummy Ache"
+  mri_image: catXRay.jpg
+  prescription_title: "Diagnosis:\nCan't Poop"
   prescription_text: |
-    Give Blue Eyes lots of water.
-    Make sure Blue Eyes gets plenty of rest.
-    Come back for another scan tomorrow.
+    Give Cally a laxative and lots of water.
+
+    Cally will stay with the vet tonight.
+
+    If she doesn't poop, she may need surgery tomorrow.
+
+    Good job in catching this early!
   fact_lines:
     - Cats use their whiskers
     - to sense nearby objects.
@@ -118,14 +134,21 @@ alpaca:
   photo: alpaca_photo.jpg
   instruction_image: AlpacaIntoMRI.jpg
   mri_image: alpaca_mri.jpg
-  prescription_title: "Diagnosis: Tummy Ache"
+  prescription_title: "Diagnosis:\nSprained Neck"
   prescription_text: |
     Snuggles sprained her neck.
+    
     Make sure Snuggles gets plenty of rest.
-    Come back for another scan tomorrow.
+
+    No running!
+    
+    Come back for another scan next week.
   fact_lines:
-    - Alpacas hum to talk
-    - to each other.
+    - Alpacas hum to talk to each other.
+    - " "
+    - Alpaca wool is super soft and warm.
+    - " "
+    - Alpacas like to stay close to their alpaca friends.
   scan_prompt: Let's take an MRI
   scan_title: Scanning...
   scan_body: Please hold still!
@@ -144,14 +167,17 @@ sheep:
   photo: sheep_photo.jpg
   instruction_image: SheepIntoMRI.jpg
   mri_image: SheepX.png
-  prescription_title: "Diagnosis: Tummy Ache"
+  prescription_title: "Diagnosis:\nTummy Ache"
   prescription_text: |
     Give Fluffies lots of water.
     Make sure Fluffies gets plenty of rest.
     Come back for another scan tomorrow.
   fact_lines:
-    - Provide wool to
-    - keep us warm.
+    - Sheep provide wool to keep us warm.
+    - " "
+    - Sheep have excellent memories. They can recognize other sheep and even people.
+    - " "
+    - Sheep use different sounds and body movements to communicate with each other.
   scan_prompt: Let's take an MRI
   scan_title: Scanning...
   scan_body: Please hold still!
@@ -170,14 +196,17 @@ goat:
   photo: goat_photo.jpg
   instruction_image: GoatIntoMRI.jpg
   mri_image: GoatX.png
-  prescription_title: "Diagnosis: Tummy Ache"
+  prescription_title: "Diagnosis:\nTummy Ache"
   prescription_text: |
     Give Billy lots of water.
     Make sure Billy gets plenty of rest.
     Come back for another scan tomorrow.
   fact_lines:
-    - Goats love to stand
-    - on high places.
+    - Goats love to stand on high places.
+    - " "
+    - Goats have rectangular pupils to see almost all the way around without turning their heads.
+    - " "
+    - Goats are great climbers.
   scan_prompt: Let's take an MRI
   scan_title: Scanning...
   scan_body: Please hold still!
